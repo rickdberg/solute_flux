@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from sqlalchemy import create_engine
 import matplotlib.gridspec as gridspec
 
-import flux_modules
+import flux_functions
 import data_handling
 from site_metadata_compiler import metadata_compiler
 
@@ -36,7 +36,7 @@ hole_info = "summary_all"
 # Load and prepare all input data
 site_metadata = metadata_compiler(engine, metadata_table, site_info,
                                   hole_info, Leg, Site)
-concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = flux_modules.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
+concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = flux_functions.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
 
 # Fit porosity curve
 por = data_handling.averages(pordata[:, 0],
@@ -48,8 +48,8 @@ if ~np.isnan(por_cutoff_depth):
 else:
     por_cutoff_depth = "NULL"
 
-por_fit = flux_modules.porosity_fit(por)
-por_error = data_handling.rmse(flux_modules.por_curve(por[:,0], por,
+por_fit = flux_functions.porosity_fit(por)
+por_error = data_handling.rmse(flux_functions.por_curve(por[:,0], por,
                                                       por_fit), por[:,1])
 
 # Plot input data
@@ -65,7 +65,7 @@ figure_1.suptitle(r"$Expedition\ {},\ Site\ {}$".format(Leg, Site),
 
 # Plot input data
 ax1.plot(por_all[:, 1], por_all[:, 0], 'mo', label='Measured')
-ax1.plot(flux_modules.por_curve(por[:,0], por, *por_fit),
+ax1.plot(flux_functions.por_curve(por[:,0], por, *por_fit),
                                 por[:,0], 'k-', label='Curve fit',
                                 linewidth=3)
 
