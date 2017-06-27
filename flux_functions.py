@@ -10,7 +10,7 @@ Modules for calculating flux of solutes into/out of sediments
 
 import numpy as np
 import pandas as pd
-from scipy import integrate, stats
+from scipy import integrate, stats, optimize
 from sqlalchemy import text
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -18,12 +18,44 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 from matplotlib import mlab
 
-
 import seawater
 
 from data_handling import averages
-from scipy import optimize
 
+# Assign advection rate to site based on sediment thickness and lithology
+# Sediment types: 1: gravel, 2: sand, 3:silt, 4: clay, 5:Calcareous ooze,
+# 6:Radiolarian ooze, 7:Diatom ooze, 8:Sponge spicules, 9:Mixed calc/sil ooze,
+# 10: shell/coral fragments, 11:Tephra, 12:Siliceous mud,
+# 13:Fine-grained calcareous sediment
+# Equations from Davis & Elderfield 2004
+# Hydrogeology of the Oceanic Lithosphere Table 6.2
+def adv_rate(sed_thickness, lithology, pressure=15000):
+    if sed_thickness < 250:
+        if lithology in (1,2):
+            def k(z):
+                p = 0.84 * z**(-0.125)
+                return 1/(3.7*10**(-18) * np.exp(1.7*(p/(1-p))))
+        elif lithology in (5,9,10,13):
+            def k(z):
+                p = 0.72 - 0.987*(z/10**3) - 0.83*(z/10**3)**2
+                return 1/(5.6*10**(-21)*np.exp(18*p))
+        elif lithology in (3,11,12):
+            def k(z):
+                p = 0.909*z**(-0.073)
+                return 1/(1.1*10**(-18)*np.exp(2.2*(p/(1-p))))
+        elif lithology == 4:
+            def k(z):
+                p = 0.814 - 0.813*(z/10**3) - 0.164*(z/10**3)**2
+                return 1/((10**(1.15*(p/(1-p)) - 13.8))/10**5)
+        elif lithology in (6,7,8):
+            def k(z):
+                p = 0.9 - 0.016*(z/10**3) - 3.854*(z/10**3)**2
+                return 1/(4.6 * 10**(-23)*np.exp(23*p))
+        impedance = integrate.fixed_quad(k,0.001,sed_thickness)
+        advection = (sed_thickness/impedance[0])*pressure/sed_thickness/(1.5*10**-3)*(60*60*24*365.25)
+    else:
+        advection = 0
+    return advection
 
 # Get site data and prepare for modeling
 def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
