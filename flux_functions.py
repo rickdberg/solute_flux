@@ -29,7 +29,7 @@ from data_handling import averages
 # 13:Fine-grained calcareous sediment
 # Equations from Davis & Elderfield 2004
 # Hydrogeology of the Oceanic Lithosphere Table 6.2
-def adv_rate(sed_thickness, lithology, pressure=15000):
+def adv_rate(sed_thickness, lithology, advection, pressure=10000):
     if sed_thickness < 250:
         if lithology in (1,2):
             def k(z):
@@ -54,8 +54,8 @@ def adv_rate(sed_thickness, lithology, pressure=15000):
         impedance = integrate.fixed_quad(k,0.001,sed_thickness)
         advection = (sed_thickness/impedance[0])*pressure/sed_thickness/(1.5*10**-3)*(60*60*24*365.25)
     else:
-        advection = 0
-    return advection
+        advection = -advection
+    return -advection
 
 # Get site data and prepare for modeling
 def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
@@ -82,6 +82,9 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     advection = float(site_metadata['advection'][0])
     if pd.isnull(advection):
         advection = 0
+
+    # Lithology (from Dutkeiwitz)
+    lithology = int(site_metadata['lithology'][0])
 
     # Pore water chemistry data
     sql = """SELECT sample_depth, {}
@@ -157,7 +160,7 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     concunique = averages(concdata[:, 0], concdata[:, 1])
     if concunique[0,0] > 0.05:
         concunique = np.concatenate((np.array(([0],ct0)).T, concunique), axis=0)  # Add in seawater value (upper limit)
-    return concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection
+    return concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection, lithology
 
 # Temperature profile (degrees C)
 def sedtemp(z, bottom_temp, temp_gradient):
