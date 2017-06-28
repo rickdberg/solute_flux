@@ -36,7 +36,7 @@ hole_info = "summary_all"
 
 sql = """select distinct mmf.*, sa.sed_thickness_combined
 from {} sa right join {} mmf
-on sa.leg = mmf.leg and sa.site_key = mmf.site
+on sa.leg = mmf.leg and sa.site = mmf.site
 where sa.sed_thickness_combined <=250
 ;
 ;""".format(hole_info, metadata_table)
