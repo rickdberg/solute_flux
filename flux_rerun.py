@@ -3,6 +3,11 @@
 Created on Sun Apr 16 19:22:16 2017
 
 @author: rickdberg
+
+Recalculate interface flux for solute that has already been calculated with
+metadata saved in MySQL database.
+This version designed to estimate advection based on sediment thickness and
+lithology.
 """
 import numpy as np
 import pandas as pd
@@ -42,7 +47,7 @@ where sa.sed_thickness_combined <=250
 ;""".format(hole_info, metadata_table)
 metadata = pd.read_sql(sql, engine)
 
-for i in np.arange(np.size(metadata, axis=0)):
+for i in np.arange(np.size(metadata, axis=0))[33:]:
     cycles = 5000
     Comments = metadata.comments[i]
     Leg = metadata.leg[i]
