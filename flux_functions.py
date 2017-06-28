@@ -86,6 +86,9 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     # Lithology (from Dutkeiwitz)
     lithology = int(site_metadata['lithology'][0])
 
+    # Sediment thickness (From Sediment_thickness_combined)
+    sed_thickness = float(site_metadata['sed_thickness_combined'][0])
+
     # Pore water chemistry data
     sql = """SELECT sample_depth, {}
         FROM {}
@@ -160,7 +163,7 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     concunique = averages(concdata[:, 0], concdata[:, 1])
     if concunique[0,0] > 0.05:
         concunique = np.concatenate((np.array(([0],ct0)).T, concunique), axis=0)  # Add in seawater value (upper limit)
-    return concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection, lithology
+    return concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection, sed_thickness, lithology
 
 # Temperature profile (degrees C)
 def sedtemp(z, bottom_temp, temp_gradient):
@@ -468,7 +471,7 @@ def monte_carlo_plot(interface_fluxes, median_flux, stdev_flux, skewness, z_scor
     ax6.text((left_log+(right_log-left_log)/20), (top_log-(top_log-bottom_log)/10), "$z'\ =\ {}$".format(np.round(z_score_log, 2)))
     return mc_figure
 
-def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
+def flux_to_sql(con, metadata_table_write, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
                 burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,r_squared,
                            age_depth_boundaries,sedrate,advection,Precision,Ds,
                            TempD,bottom_temp,bottom_temp_est,cycles,
@@ -477,7 +480,7 @@ def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
                            stdev_flux_log,stdev_flux_lower,stdev_flux_upper,
                            skewness_log,z_score_log,runtime_errors,Date,Comments,Complete):
     # Send metadata to database
-    sql= """insert into metadata_{}_flux (site_key,leg,site,hole,solute,
+    sql= """insert into {} (site_key,leg,site,hole,solute,
                    interface_flux,burial_flux,gradient,top_por,flux_depth,datapoints,
                    bottom_conc,conc_fit,r_squared,age_depth_boundaries,sed_rate,advection,
                    measurement_precision,ds,ds_reference_temp,bottom_temp,
@@ -499,7 +502,7 @@ def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
                    median_flux_log={}, stdev_flux_log={}, stdev_flux_lower={},
                    stdev_flux_upper={}, skewness_log={}, z_score_log={},runtime_errors={},
                    run_date='{}', comments='{}', complete='{}'
-                   ;""".format(Solute_db, site_key,Leg,Site,Hole,Solute,
+                   ;""".format(metadata_table_write, site_key,Leg,Site,Hole,Solute,
                                flux,burial_flux,gradient,porosity,
                                z,dp,bottom_conc,conc_fit,r_squared,
                                age_depth_boundaries,sedrate,advection,
@@ -522,12 +525,12 @@ def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
     con.execute(sql)
 
 
-def flux_only_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
+def flux_only_to_sql(con, metadata_table_write, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
                 burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,r_squared,
                            age_depth_boundaries,sedrate,advection,Precision,Ds,
                            TempD,bottom_temp,bottom_temp_est,Date,Comments,Complete):
     # Send metadata to database
-    sql= """insert into metadata_{}_flux (site_key,leg,site,hole,solute,
+    sql= """insert into {} (site_key,leg,site,hole,solute,
                    interface_flux,burial_flux,gradient,top_por,flux_depth,datapoints,
                    bottom_conc,conc_fit,r_squared,age_depth_boundaries,sed_rate,advection,
                    measurement_precision,ds,ds_reference_temp,bottom_temp,
@@ -541,7 +544,7 @@ def flux_only_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
                    measurement_precision={}, ds={}, ds_reference_temp={},
                    bottom_temp={}, bottom_temp_est='{}',
                    run_date='{}', comments='{}', complete='{}'
-                   ;""".format(Solute_db, site_key,Leg,Site,Hole,Solute,
+                   ;""".format(metadata_table_write, site_key,Leg,Site,Hole,Solute,
                                flux,burial_flux,gradient,porosity,
                                z,dp,bottom_conc,conc_fit,r_squared,
                                age_depth_boundaries,sedrate,advection,

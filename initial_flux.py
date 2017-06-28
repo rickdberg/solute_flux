@@ -63,8 +63,9 @@ site_metadata = metadata_compiler(engine, metadata_table, site_info, hole_info, 
 # dp = int(site_metadata.datapoints[0])
 # Comments = site_metadata.comments[0]
 
-concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = flux_functions.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
-advection = adv_rate(sed_thickness, lithology, advection)
+concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection, lithology, sed_thickness = flux_functions.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
+advection = flux_functions.adv_rate(sed_thickness, lithology, advection)
+
 # Fit pore water concentration curve
 conc_fit = flux_functions.concentration_fit(concunique, dp)
 conc_interp_fit_plot = flux_functions.conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), *conc_fit)

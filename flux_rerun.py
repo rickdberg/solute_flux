@@ -30,15 +30,19 @@ con = engine.connect()
 conctable = 'iw_all'
 portable = 'mad_all'
 metadata_table = "metadata_mg_flux"
+metadata_table_write = "metadata_mg_flux_flow"
 site_info = "site_info"
 hole_info = "summary_all"
 
-sql = """select *
-from {}
-;""".format(metadata_table)
+sql = """select distinct mmf.*, sa.sed_thickness_combined
+from {} sa right join {} mmf
+on sa.leg = mmf.leg and sa.site_key = mmf.site
+where sa.sed_thickness_combined <=250
+;
+;""".format(hole_info, metadata_table)
 metadata = pd.read_sql(sql, engine)
 
-for i in np.arange(np.size(metadata, axis=0))[265:]:
+for i in np.arange(np.size(metadata, axis=0)):
     cycles = 5000
     Comments = metadata.comments[i]
     Leg = metadata.leg[i]
@@ -56,7 +60,8 @@ for i in np.arange(np.size(metadata, axis=0))[265:]:
 
     # Load and prepare all input data
     site_metadata = metadata_compiler(engine, metadata_table, site_info, hole_info, Leg, Site)
-    concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = flux_functions.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
+    concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection, sed_thickness, lithology = flux_functions.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
+    advection = flux_functions.adv_rate(sed_thickness, lithology, advection)
 
     # Fit pore water concentration curve
     conc_fit = flux_functions.concentration_fit(concunique, dp)
@@ -95,7 +100,7 @@ for i in np.arange(np.size(metadata, axis=0))[265:]:
     # figure_1.show()
 
     # Save Figure
-    savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\interface_flux_{}_{}.png".format(Leg, Site))
+    savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\interface_flux_{}_{}_flow.png".format(Leg, Site))
     figure_1.clf()
     plt.close('all')
 
@@ -107,9 +112,9 @@ for i in np.arange(np.size(metadata, axis=0))[265:]:
     # mc_figure.show()
 
     # Save figure and fluxes from each run
-    savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\montecarlo_{}_{}.png".format(Leg, Site))
+    savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\montecarlo_{}_{}_flow.png".format(Leg, Site))
     mc_figure.clf()
-    np.savetxt(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\monte carlo_{}_{}.csv".format(Leg, Site), interface_fluxes, delimiter=",")
+    np.savetxt(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\monte carlo_{}_{}_flow.csv".format(Leg, Site), interface_fluxes, delimiter=",")
 
 
     # Date and time
@@ -123,7 +128,7 @@ for i in np.arange(np.size(metadata, axis=0))[265:]:
     site_key = site_key.fetchone()[0]
 
     # Send metadata to database
-    flux_functions.flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
+    flux_functions.flux_to_sql(con, metadata_table_write, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
                     burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,r_squared,
                                age_depth_boundaries,sedrate,advection,Precision,Ds,
                                TempD,bottom_temp,bottom_temp_est,cycles,
