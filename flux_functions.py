@@ -29,6 +29,7 @@ from data_handling import averages
 # 13:Fine-grained calcareous sediment
 # Equations from Davis & Elderfield 2004
 # Hydrogeology of the Oceanic Lithosphere Table 6.2
+# Not representative of real sites.... wtf
 def adv_rate(sed_thickness, lithology, advection, pressure=10000):
     if sed_thickness < 250:
         if lithology in (1,2):
