@@ -28,14 +28,14 @@ plt.close('all')
 ###############################################################################
 ###############################################################################
 # Site Information
-Leg = '323'
-Site = 'U1345'
+Leg = '172'
+Site = '1063'
 Holes = "('A') or hole is null"
 Comments = ''
-Complete = 'yes'
+Complete = 'no'
 
 # Species parameters
-Solute = 'Mg_ic'  # Change to Mg_ic if needed, based on what's available in database
+Solute = 'Mg'  # Change to Mg_ic if needed, based on what's available in database
 Ds = 1.875*10**-2  # m^2 per year free diffusion coefficient at 18C (ref?)
 TempD = 18  # Temperature at which diffusion coefficient is known
 Precision = 0.02  # measurement precision
@@ -43,7 +43,7 @@ Ocean = 54  # Concentration in modern ocean (mM)
 Solute_db = 'Mg' # Solute label to send to the database
 
 # Model parameters
-dp = 4 # Number of concentration datapoints to use for exponential curve fit
+dp = 23 # Number of concentration datapoints to use for exponential curve fit
 z = 0  # Depth (meters below seafloor) at which to calculate flux
 cycles = 5000  # Monte Carlo simulations
 runtime_errors = 0
@@ -103,7 +103,6 @@ plt.ioff()
 figure_1 = flux_functions.flux_plots(concunique, conc_interp_fit_plot, por, por_all, por_fit, bottom_temp, picks, sedtimes, seddepths, Leg, Site, Solute_db, flux, dp, temp_gradient)
 figure_1.show()
 
-
 # Save Figure
 savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\interface_flux_{}_{}.png".format(Leg, Site))
 
@@ -118,6 +117,7 @@ mc_figure.show()
 # Save figure and fluxes from each run
 savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\montecarlo_{}_{}.png".format(Leg, Site))
 np.savetxt(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\monte carlo_{}_{}.csv".format(Leg, Site), interface_fluxes, delimiter=",")
+# mc_figure.savefig('mc_histogram.png', facecolor='none')
 
 
 # Date and time
