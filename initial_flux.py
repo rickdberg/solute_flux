@@ -27,14 +27,14 @@ plt.close('all')
 ###############################################################################
 ###############################################################################
 # Site Information
-Leg = '342'
-Site = 'U1404'
-Holes = "('A','B','C') or hole is null"
+Leg = '172'
+Site = '1063'
+Holes = "('A') or hole is null"
 Comments = ''
 Complete = 'no'
 
 # Species parameters
-Solute = 'Mg_ic'  # Change to Mg_ic if needed, based on what's available in database
+Solute = 'Mg'  # Change to Mg_ic if needed, based on what's available in database
 Ds = 1.875*10**-2  # m^2 per year free diffusion coefficient at 18C (ref?)
 TempD = 18  # Temperature at which diffusion coefficient is known
 Precision = 0.02  # measurement precision
@@ -42,7 +42,7 @@ Ocean = 54  # Concentration in modern ocean (mM)
 Solute_db = 'Mg' # Solute label to send to the database
 
 # Model parameters
-dp = 13 # Number of concentration datapoints to use for exponential curve fit
+dp = 23 # Number of concentration datapoints to use for exponential curve fit
 z = 0  # Depth (meters below seafloor) at which to calculate flux
 
 # Connect to database
@@ -100,6 +100,7 @@ flux, burial_flux, gradient = flux_functions.flux_model(conc_fit, concunique, z,
 plt.ioff()
 figure_1 = flux_functions.flux_plots(concunique, conc_interp_fit_plot, por, por_all, por_fit, bottom_temp, picks, sedtimes, seddepths, Leg, Site, Solute_db, flux, dp, temp_gradient)
 figure_1.show()
+figure_1.savefig('iodp_profiles.png', facecolor='none')
 
 # Date and time
 Date = datetime.datetime.now()
