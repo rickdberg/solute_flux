@@ -28,22 +28,23 @@ plt.close('all')
 ###############################################################################
 ###############################################################################
 # Site Information
-Leg = '172'
-Site = '1063'
-Holes = "('A') or hole is null"
+Leg = '72'
+Site = '516'
+Holes = "('A','F') or hole is null"
+dp = 2 # Number of concentration datapoints to use for exponential curve fit
+
 Comments = ''
-Complete = 'no'
+Complete = 'yes'
 
 # Species parameters
-Solute = 'Mg'  # Change to Mg_ic if needed, based on what's available in database
-Ds = 1.875*10**-2  # m^2 per year free diffusion coefficient at 18C (ref?)
+Solute = 'Li'  # Change to Mg_ic if needed, based on what's available in database
+Ds = 2.742*10**-2  # m^2 per year free diffusion coefficient at 18C (ref?)
 TempD = 18  # Temperature at which diffusion coefficient is known
 Precision = 0.02  # measurement precision
-Ocean = 54  # Concentration in modern ocean (mM)
-Solute_db = 'Mg' # Solute label to send to the database
+Ocean = 0.027  # Concentration in modern ocean (mM)
+Solute_db = 'Li' # Solute label to send to the database
 
 # Model parameters
-dp = 23 # Number of concentration datapoints to use for exponential curve fit
 z = 0  # Depth (meters below seafloor) at which to calculate flux
 cycles = 5000  # Monte Carlo simulations
 runtime_errors = 0
@@ -53,7 +54,7 @@ engine = create_engine("mysql://root:neogene227@localhost/iodp_compiled")
 con = engine.connect()
 conctable = 'iw_all'
 portable = 'mad_all'
-metadata_table = "metadata_mg_flux"
+metadata_table = "metadata_li_flux"
 site_info = "site_info"
 hole_info = "summary_all"
 Hole = ''.join(filter(str.isupper, filter(str.isalpha, Holes)))  # Formatting for saving in metadata
@@ -67,6 +68,7 @@ site_metadata = metadata_compiler(engine, metadata_table, site_info, hole_info, 
 # Comments = site_metadata.comments[0]
 
 concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = flux_functions.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
+concunique[1:,1] = concunique[1:,1]/10
 
 # Fit pore water concentration curve
 conc_fit = flux_functions.concentration_fit(concunique, dp)
@@ -104,7 +106,7 @@ figure_1 = flux_functions.flux_plots(concunique, conc_interp_fit_plot, por, por_
 figure_1.show()
 
 # Save Figure
-savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\interface_flux_{}_{}.png".format(Leg, Site))
+savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
 
 
 # Monte Carlo Simulation
@@ -115,8 +117,8 @@ mc_figure =flux_functions.monte_carlo_plot(interface_fluxes, median_flux, stdev_
 mc_figure.show()
 
 # Save figure and fluxes from each run
-savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\montecarlo_{}_{}.png".format(Leg, Site))
-np.savetxt(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\monte carlo_{}_{}.csv".format(Leg, Site), interface_fluxes, delimiter=",")
+savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\montecarlo_{}_{}_{}.png".format(Solute_db, Leg, Site))
+np.savetxt(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\monte carlo_{}_{}_{}.csv".format(SOlute_db_Leg, Site), interface_fluxes, delimiter=",")
 # mc_figure.savefig('mc_histogram.png', facecolor='none')
 
 

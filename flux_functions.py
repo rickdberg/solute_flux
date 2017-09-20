@@ -348,9 +348,9 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
 # Plotting
 def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_temp, picks, sedtimes, seddepths, Leg, Site, Solute_db, flux, dp, temp_gradient):
     # Set up axes and subplot grid
-    mpl.rcParams['mathtext.fontset'] = 'custom'
-    mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'
-    mpl.rc('font',family='Palatino Linotype')
+    mpl.rcParams['mathtext.fontset'] = 'stix'
+    #mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'
+    mpl.rc('font',family='serif')
     figure_1, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(10, 6), facecolor='none')
     grid = gridspec.GridSpec(3, 6, wspace=0.7)
     ax1 = plt.subplot(grid[0:3, :2])
@@ -386,13 +386,13 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_te
 
     # Inset in concentration plot
     y2 = np.ceil(concunique[dp-1,0])
-    x2 = max(concunique[:dp,1])+2
-    x1 = min(concunique[:dp,1])-2
+    x2 = max(concunique[:dp,1])+0.01
+    x1 = min(concunique[:dp,1])-0.01
     axins1 = inset_axes(ax1, width="50%", height="30%", loc=5)
     axins1.plot(concunique[:,1], concunique[:,0], 'go')
     axins1.plot(concunique[0:dp,1], concunique[0:dp,0], 'bo', label="Used for curve fit")
     axins1.plot(conc_interp_fit_plot, np.linspace(concunique[0,0], concunique[dp-1,0], num=50), 'k-')
-    axins1.set_xlim(x1-1, x2+1)
+    axins1.set_xlim(x1-0.01, x2+0.01)
     axins1.set_ylim(0, y2)
     mark_inset(ax1, axins1, loc1=1, loc2=2, fc="none", ec="0.5")
 
@@ -401,14 +401,14 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_te
     ax2.legend(loc='best', fontsize='small')
     ax3.legend(loc='best', fontsize='small')
     ax1.set_ylabel('$Depth\ (mbsf)$', fontsize=18)
-    ax1.set_xlabel('$Mg^{2+}\ (mM)$', fontsize=18)
+    ax1.set_xlabel('${}\ (mM)$'.format(Solute_db), fontsize=18)
     ax2.set_xlabel('$Porosity$', fontsize=18)
     ax3.set_xlabel('$Age\ (Ma)$', fontsize=18)
-    # ax4.set_xlabel('Temperature (\u00b0C)')
+    #ax4.set_xlabel('Temperature (\u00b0C)')
     ax1.locator_params(axis='x', nbins=4)
     ax2.locator_params(axis='x', nbins=4)
     ax3.locator_params(axis='x', nbins=4)
-    # ax4.locator_params(axis='x', nbins=4)
+    #ax4.locator_params(axis='x', nbins=4)
     axins1.locator_params(axis='x', nbins=3)
     ax1.invert_yaxis()
     axins1.invert_yaxis()
@@ -416,9 +416,9 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_te
 
 
 def monte_carlo_plot(interface_fluxes, median_flux, stdev_flux, skewness, z_score, interface_fluxes_log, median_flux_log, stdev_flux_log, skewness_log, z_score_log):
-    mpl.rcParams['mathtext.fontset'] = 'custom'
-    mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'
-    mpl.rc('font',family='Palatino Linotype')
+    mpl.rcParams['mathtext.fontset'] = 'stix'
+    #mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'
+    mpl.rc('font',family='serif')
     mc_figure, (ax5, ax6) = plt.subplots(1, 2, figsize=(12, 5),gridspec_kw={'wspace':0.2,
                                                         'top':0.92,
                                                         'bottom':0.13,
