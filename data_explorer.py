@@ -28,7 +28,6 @@ hole_info = "summary_all"
 # Load site data
 data = comp(database, metadata, site_info, hole_info)
 
-
 # Geographic patterns
 size = abs(data['interface_flux'].astype(float)*10000000)
 color = data['interface_flux'].astype(float)
@@ -49,10 +48,26 @@ plt.show()
 
 # Histogram
 d = data['interface_flux'].astype(float)*1000
-h = d.hist(bins=100)
+h = d.hist(bins=200)
 h.set_ylabel('$Count$', fontsize=20)
 h.set_xlabel('$Li\ Flux\ (mmol\ m^{-2}\ y^{-1})$', fontsize=20)
 plt.show()
 
-median_stdev = np.nanmedian(data['stdev_flux'].astype(float)/data['interface_flux'].astype(float)*100)
+#data = data.loc[data['datapoints'].astype(float) > 2]
+
+median = np.nanmedian(data['interface_flux'].astype(float))
+median_pos = np.nanmedian(data.loc[data['interface_flux'].astype(float) > 0,'interface_flux'].astype(float))
+median_neg = np.nanmedian(data.loc[data['interface_flux'].astype(float) < 0,'interface_flux'].astype(float))
+print('Median:', median)
+print('Median positive:', median_pos)
+print('Median negative:', median_neg)
+num_pos = np.count_nonzero(data.loc[data['interface_flux'].astype(float) > 0,'interface_flux'])
+num_neg = np.count_nonzero(data.loc[data['interface_flux'].astype(float) < 0,'interface_flux'])
+print('Count positive:', num_pos)
+print('Count negative:', num_neg)
+
+
+median_stdev = np.nanmedian(data['stdev_flux'].astype(float)/abs(data['interface_flux'].astype(float))*100)
+print('Median stdev (%):', median_stdev)
+
 # eof
