@@ -27,22 +27,26 @@ plt.close('all')
 ###############################################################################
 ###############################################################################
 # Site Information
-Leg = '145'
-Site = '882'
-Holes = "('B') or hole is null"
+Leg = '12'
+Site = '116'
+Holes = "('A') or hole is null"
+dp = 2  # Number of concentration datapoints to use for exponential curve fit
+
+
+
+
 Comments = ''
 Complete = 'no'
 
 # Species parameters
-Solute = 'Li'  # Change to Mg_ic if needed, based on what's available in database
-Ds = 2.742*10**-2  # m^2 per year free diffusion coefficient at 18C (ref?)
+Solute = 'B'  # Change to Mg_ic if needed, based on what's available in database
+Ds = 3.629*10**-2  # m^2 per year free diffusion coefficient at 18C (ref?)
 TempD = 18  # Temperature at which diffusion coefficient is known
-Precision = 0.02  # measurement precision
-Ocean = 0.027  # Concentration in modern ocean (mM)
-Solute_db = 'Li' # Solute label to send to the database
+Precision = 0.03  # measurement precision
+Ocean = 450  # Concentration in modern ocean (mM)
+Solute_db = 'B' # Solute label to send to the database
 
 # Model parameters
-dp = 5  # Number of concentration datapoints to use for exponential curve fit
 z = 0  # Depth (meters below seafloor) at which to calculate flux
 
 # Connect to database
@@ -64,7 +68,7 @@ site_metadata = metadata_compiler(engine, metadata_table, site_info, hole_info, 
 # Comments = site_metadata.comments[0]
 
 concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = flux_functions.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
-concunique[1:,1] = concunique[1:,1]/1000
+concunique[1:,1] = concunique[1:,1]
 # Fit pore water concentration curve
 conc_fit = flux_functions.concentration_fit(concunique, dp)
 conc_interp_fit_plot = flux_functions.conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), *conc_fit)

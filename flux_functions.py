@@ -397,7 +397,7 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_te
     mark_inset(ax1, axins1, loc1=1, loc2=2, fc="none", ec="0.5")
 
     # Additional formatting
-    ax1.legend(loc='best', fontsize='small')
+    ax1.legend(loc='lower left', fontsize='small')
     ax2.legend(loc='best', fontsize='small')
     ax3.legend(loc='best', fontsize='small')
     ax1.set_ylabel('$Depth\ (mbsf)$', fontsize=18)
