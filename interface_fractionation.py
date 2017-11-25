@@ -71,7 +71,7 @@ concunique.columns = ['sample_depth', 'mg_conc']
 # concunique.iloc[0,1] = concunique.iloc[1,1]
 
 # Mg isotope data, combined with corresponding Mg concentrations
-sql = """select sample_depth, d26mg, d25mg
+sql = """select sample_depth, d26mg, d25mg, d26mg_2sd
     from mg_isotopes
     where leg = '{}'
     and site = '{}'
@@ -83,6 +83,10 @@ isotopedata_26 = data_handling.averages(isotopedata['sample_depth'],
                                         isotopedata.iloc[:, 1])
 isotopedata_25 = data_handling.averages(isotopedata['sample_depth'],
                                         isotopedata.iloc[:, 2])
+isotopedata_26_2sd = data_handling.averages(isotopedata['sample_depth'],
+                                        isotopedata.iloc[:, 3])
+isotopedata_26_1sd = 0.5*np.append([0.05], isotopedata_26_2sd[:,1][~np.isnan(isotopedata_26_2sd[:,1])]) # Assumes standard deviation of seawater value of 0.05
+Precision_iso = isotopedata_26_1sd
 isotopedata_26 = pd.DataFrame(isotopedata_26)
 isotopedata_25 = pd.DataFrame(isotopedata_25)
 isotopedata = pd.DataFrame(np.concatenate((isotopedata_26,
@@ -99,17 +103,13 @@ isotopedata = pd.merge(isotopedata,
 concunique_mg = concunique.reset_index(drop=True)
 # Add seawater values (upper boundary condition, dirichlet) to profiles
 isotopedata = isotopedata.as_matrix()
+
 #U1414 and U1039 don't use water column data as upper bound
-#ct_d26 = [isotopedata[0,1]]  # [-0.83]
-#ct_d25 = [isotopedata[0,2]]  # [-0.42]
+ct_d26 = [isotopedata[0,1]]  # [-0.82]
+ct_d25 = [isotopedata[0,2]]  # [-0.42]
+# ct_d26 = [-0.82]
+# ct_d25 = [-0.41]
 
-# For U1414
-# isotopedata[2,3] = concunique_mg.iloc[10,1]
-# isotopedata[6,3] = concunique_mg.iloc[55,1]
-
-
-ct_d26 = [-0.82]
-ct_d25 = [-0.41]
 
 mg26_24_ocean = ((ct_d26[0]/1000)+1)*0.13979
 isotopedata = np.concatenate((np.array(([0],
@@ -119,8 +119,6 @@ isotopedata = np.concatenate((np.array(([0],
                               isotopedata),
                              axis=0)
 
-
-
 # Calculate Mg isotope concentrations
 # Source for 26/24std: Isotope Geochemistry, William White, pp.365
 mg26_24 = ((isotopedata[:, 1]/1000)+1)*0.13979 # np.ones(len(isotopedata[:, 1]))*mg26_24_ocean #   # Decimal numbers are isotopic ratios of standards
@@ -129,7 +127,7 @@ concunique_mg24 = isotopedata[:, 3]/(mg26_24+mg25_24+1)
 concunique_mg25 = concunique_mg24*mg25_24
 concunique_mg26 = concunique_mg24*mg26_24
 
-conc_list = [pd.DataFrame(np.array((isotopedata[:,0],concunique_mg24)).T),
+isotope_concs = [pd.DataFrame(np.array((isotopedata[:,0],concunique_mg24)).T),
              pd.DataFrame(np.array((isotopedata[:,0],concunique_mg26)).T)]
 
 
@@ -155,7 +153,7 @@ pwburialflux = flux_functions.pw_burial(seddepths, sedtimes, por_fit, por)
 
 fluxes = []
 for n in np.arange(2):
-    concunique = np.array(conc_list[n])
+    concunique = np.array(isotope_concs[n])
     # Fit pore water concentration curve
     conc_fit = flux_functions.concentration_fit(concunique, dp)
     conc_interp_fit_plot = flux_functions.conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), *conc_fit)
@@ -204,6 +202,12 @@ sql= """insert into metadata_{}_flux (site_key,leg,site,hole,solute,
 con.execute(sql)
 
 
+# Monte Carlo Simulation
+alpha, epsilon, cycles, por_error, mean_epsilon, median_epsilon, stdev_epsilon, z_score, p_value, runtime_errors = flux_functions.monte_carlo_fract(cycles, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean)
+
+# Plot Monte Carlo Distributions
+mc_figure =flux_functions.monte_carlo_plot_fract(epsilon, median_epsilon, stdev_epsilon, z_score)
+mc_figure.show()
 
 
 

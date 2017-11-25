@@ -345,6 +345,114 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
     stdev_flux_upper = np.exp(-(median_flux_log+stdev_flux_log))
     return interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, z_score, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, z_score_log, runtime_errors
 
+def monte_carlo_fract(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean):
+    # Porosity offsets - using full gaussian probability
+    por_offsets = np.random.normal(scale=por_error, size=(cycles, len(por[:,1])))
+
+    # Get randomized porosity matrix (within realistic ranges between 30% and 90%)
+    por_rand = np.add(por_curve(por[:,0], por, *por_fit), por_offsets)
+    por_rand[por_rand > 0.90] = 0.90
+    por_rand[por_rand < 0.30] = 0.30
+
+    portop = np.max(por[:3,1])
+    portop_rand = np.add(portop, por_offsets[:,0])
+    portop_rand = portop_rand[portop_rand > por_curve(por[-1,0], por, *por_fit)]
+    portop_rand = portop_rand[portop_rand < 0.90]
+
+    cycles = len(portop_rand)
+    por_rand = por_rand[:cycles,:]
+
+    # Isotopic ratio (in delta notation) offsets - using full gaussian probability
+
+    delta_offsets = Precision[:,None]*np.random.normal(scale=1, size=(len(Precision), cycles))
+
+    # Calculate Mg isotope concentrations
+    # Source for 26/24std: Isotope Geochemistry, William White, pp.365
+    mg26_24 = (((isotopedata[:, 1][:,None]+delta_offsets)/1000)+1)*0.13979 # np.ones(len(isotopedata[:, 1]))*mg26_24_ocean #   # Decimal numbers are isotopic ratios of standards
+    mg25_24 = (((isotopedata[:, 2][:,None]+delta_offsets)/1000)+1)*0.126635  # Estimated for now (calc'd from 26/24 value divided by 25/24 measured values)
+    concunique_mg24 = isotopedata[:, 3][:,None]/(mg26_24+mg25_24+1)
+    concunique_mg25 = concunique_mg24*mg25_24
+    concunique_mg26 = concunique_mg24*mg26_24
+
+    isotope_concs = [concunique_mg24, concunique_mg26]
+
+    # Bottom water temperature offsets errors calculated in bottom_temp_error_estimate.py
+    if bottom_temp_est == 'deep':
+        temp_error = 0.5
+        temp_offsets = np.random.normal(scale=temp_error, size=cycles)
+    elif bottom_temp_est == 'shallow':
+        temp_error = 2.4
+        temp_offsets = np.random.normal(scale=temp_error, size=cycles)
+    else:
+        temp_error = 0
+        temp_offsets = np.zeros(cycles)
+
+    ###############################################################################
+    # Calculate fluxes for random profiles
+
+    # Calculate flux
+    conc_fits = np.empty((cycles, len(conc_fit), 2))
+    por_fits = np.empty(cycles)
+    pwburialfluxes = np.empty(cycles)
+    conc_rand_n = np.stack((isotopedata[:dp,0], np.empty(dp)), axis=1)
+    por_rand_n = np.stack((por[:,0], np.empty(len(por))), axis=1)
+    for n in range(cycles):
+        for i in np.arange(2):
+            conc_rand_n[:,1] = isotope_concs[i][:dp,n]
+            # Fit pore water concentration curve
+            try:
+                conc_fit = concentration_fit(conc_rand_n, dp)
+            except RuntimeError:
+                runtime_errors += 1
+            conc_fits[n,:,i] = conc_fit
+
+        # Fit exponential curve to each randomized porosity profile
+        por_rand_n[:,1] =  por_rand[n,:]
+        por_fit = porosity_fit(por_rand_n)
+        por_fits[n] = por_fit
+
+        # Pore water burial mass flux
+        # Sediment mass (1-dimensional volume of solids) accumulation rates for each age-depth section
+        # Assumes constant sediment mass (really volume of solids) accumulation rates between age-depth measurements
+        pwburialflux = pw_burial(seddepths, sedtimes, por_fit, por)
+        pwburialfluxes[n] = pwburialflux
+
+    # Dsed vector
+    tortuosity_rand = 1-np.log(portop_rand**2)
+    bottom_temp_rand = bottom_temp+temp_offsets
+    bottom_temp_rand[bottom_temp_rand < -2] = -2
+
+    Dsed_rand = d_stp(TempD, bottom_temp_rand, Ds)/tortuosity_rand
+
+
+    # Plot all the monte carlo runs
+    # conc_interp_fit_plot = conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), conc_fits)
+    # por_interp_fit_plot = conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), conc_fits)
+
+    # Calculate fluxes
+    fluxes = []
+    for i in np.arange(2):
+        gradient = conc_fits[:,1,i] * conc_fits[:,0,i] * np.exp(np.multiply(conc_fits[:,0,i], z))
+        interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(z, conc_fits[:,0,i], conc_fits[:,1,i], conc_fits[:,2,i])
+        fluxes.append(interface_fluxes)
+    mg26_24_flux = fluxes[1]/fluxes[0]
+    alpha = mg26_24_flux/mg26_24_ocean
+    epsilon = (alpha - 1) * 1000
+
+    ###########################################################################
+    # Distribution statistics
+
+    # Stats on normal distribution
+    mean_epsilon = np.mean(epsilon)
+    median_epsilon = np.median(epsilon)
+    stdev_epsilon = np.std(epsilon)
+    z_score, p_value = stats.skewtest(epsilon)
+
+    return alpha, epsilon, cycles, por_error, mean_epsilon, median_epsilon, stdev_epsilon, z_score, p_value, runtime_errors
+
+
+
+
 # Plotting
 def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_temp, picks, sedtimes, seddepths, Leg, Site, Solute_db, flux, dp, temp_gradient):
     # Set up axes and subplot grid
@@ -413,6 +521,31 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_te
     ax1.invert_yaxis()
     axins1.invert_yaxis()
     return figure_1
+
+def monte_carlo_plot_fract(epsilon, median_epsilon, stdev_epsilon, z_score):
+    mpl.rcParams['mathtext.fontset'] = 'stix'
+    #mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'
+    mpl.rc('font',family='serif')
+    mc_figure, (ax5) = plt.subplots(1, 1, figsize=(6, 5),gridspec_kw={'wspace':0.2,
+                                                        'top':0.92,
+                                                        'bottom':0.13,
+                                                        'left':0.1,
+                                                        'right':0.90})
+
+    # Plot histogram of results
+    n_1, bins_1, patches_1 = ax5.hist(epsilon, normed=1, bins=30, facecolor='orange')
+
+    # Best fit normal distribution line to results
+    bf_line_1 = mlab.normpdf(bins_1, median_epsilon, stdev_epsilon)
+    ax5.plot(bins_1, bf_line_1, 'k--', linewidth=2)
+    ax5.set_xlabel("$Epsilon$", fontsize=20)
+
+    [left_raw, right_raw] = ax5.get_xlim()
+    [bottom_raw, top_raw] = ax5.get_ylim()
+    ax5.text((left_raw+(right_raw-left_raw)/20), (top_raw-(top_raw-bottom_raw)/10), "$z'\ =\ {}$".format(np.round(z_score, 2)))
+
+
+    return mc_figure
 
 
 def monte_carlo_plot(interface_fluxes, median_flux, stdev_flux, skewness, z_score, interface_fluxes_log, median_flux_log, stdev_flux_log, skewness_log, z_score_log):
