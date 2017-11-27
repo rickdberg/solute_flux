@@ -110,7 +110,6 @@ ct_d25 = [isotopedata[0,2]]  # [-0.42]
 # ct_d26 = [-0.82]
 # ct_d25 = [-0.41]
 
-
 mg26_24_ocean = ((ct_d26[0]/1000)+1)*0.13979
 isotopedata = np.concatenate((np.array(([0],
                                         ct_d26,
@@ -129,7 +128,6 @@ concunique_mg26 = concunique_mg24*mg26_24
 
 isotope_concs = [pd.DataFrame(np.array((isotopedata[:,0],concunique_mg24)).T),
              pd.DataFrame(np.array((isotopedata[:,0],concunique_mg26)).T)]
-
 
 # Fit porosity curve
 por = data_handling.averages(pordata[:, 0], pordata[:, 1])  # Average duplicates
@@ -170,10 +168,8 @@ for n in np.arange(2):
     figure_1.show()
 
     # Save Figure
-    savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\interface_{}_fractionation_{}_{}_{}.png".format(Solute_db, Leg, Site, n))
+    savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output fractionation figures\interface_{}_fractionation_{}_{}_{}.png".format(Solute_db, Leg, Site, n))
     fluxes.append(flux)
-
-
 
 #######################################################################
 # Calculate fractionation based on fluxes
@@ -201,15 +197,22 @@ sql= """insert into metadata_{}_flux (site_key,leg,site,hole,solute,
                            alpha)
 con.execute(sql)
 
-
 # Monte Carlo Simulation
-alpha, epsilon, cycles, por_error, mean_epsilon, median_epsilon, stdev_epsilon, z_score, p_value, runtime_errors = flux_functions.monte_carlo_fract(cycles, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean)
+alpha, epsilon, cycles, por_error, alpha_mean, alpha_median, alpha_stdev, z_score, p_value, runtime_errors, conc_fits, fluxes = flux_functions.monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean)
+
+sql= """insert into metadata_{}_flux (site_key,leg,site,hole,solute,
+               alpha_mean, alpha_median, alpha_stdev, alpha_z_score)
+               VALUES ({}, '{}', '{}', '{}', '{}', {}, {}, {}, {})
+               ON DUPLICATE KEY UPDATE alpha_mean={}, alpha_median={},
+               alpha_stdev={}, alpha_z_score={}
+               ;""".format(Solute_db, site_key,Leg,Site,Hole,Solute,
+                           alpha_mean, alpha_median, alpha_stdev, z_score,
+                           alpha_mean, alpha_median, alpha_stdev, z_score)
+con.execute(sql)
 
 # Plot Monte Carlo Distributions
-mc_figure =flux_functions.monte_carlo_plot_fract(epsilon, median_epsilon, stdev_epsilon, z_score)
+mc_figure =flux_functions.monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev, alpha_mean, z_score)
 mc_figure.show()
-
-
-
+savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output fractionation figures\interface_{}_fractionation_distribution_{}_{}.png".format(Solute_db, Leg, Site))
 
 # eof

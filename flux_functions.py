@@ -174,9 +174,9 @@ def conc_curve(z,a,b,c):
 
 def concentration_fit(concunique, dp):
     if np.mean(concunique[1:dp,1]) < concunique[0,1]:
-        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[-0.1,10,40], bounds=([-1,-100,-1000],[1,1000,1000]), method='trf')
+        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[-0.1,10,40], bounds=([-1,-100,-1000],[1,100,1000]), method='trf')
     else:
-        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[-0.1,-10,60], bounds=([-1,-1000,-1000],[1,1000,1000]), method='trf')
+        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[-0.1,-10,60], bounds=([-1,-100,-1000],[1,100,1000]), method='trf')
     # conc_interp_depths = np.arange(0,3,intervalthickness)  # Three equally-spaced points
     # conc_interp_fit = conc_curve(conc_interp_depths, conc_fit)  # To be used if Boudreau method for conc gradient is used
     return conc_fit
@@ -345,7 +345,7 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
     stdev_flux_upper = np.exp(-(median_flux_log+stdev_flux_log))
     return interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, z_score, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, z_score_log, runtime_errors
 
-def monte_carlo_fract(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean):
+def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean):
     # Porosity offsets - using full gaussian probability
     por_offsets = np.random.normal(scale=por_error, size=(cycles, len(por[:,1])))
 
@@ -362,16 +362,26 @@ def monte_carlo_fract(cycles, Precision, concunique, bottom_temp_est, dp, por, p
     cycles = len(portop_rand)
     por_rand = por_rand[:cycles,:]
 
-    # Isotopic ratio (in delta notation) offsets - using full gaussian probability
+    # Concentration offsets - using full gaussian probability
+    # relativeerror = Precision
+    # conc_offsets = np.random.normal(scale=relativeerror,
+    #                                 size=(cycles, len(isotopedata[:, 3])))
 
-    delta_offsets = Precision[:,None]*np.random.normal(scale=1, size=(len(Precision), cycles))
+    # Isotopic ratio (in delta notation) offsets - using full gaussian probability
+    delta_offsets = Precision_iso[:,None]*np.random.normal(scale=1,
+                                            size=(len(Precision_iso), cycles))
+
+    # Get randomized concentration matrix (within realistic ranges)
+    # conc_rand = np.add(isotopedata[:, 3], np.multiply(conc_offsets,
+    #                                                    isotopedata[:, 3]))
+    # conc_rand[conc_rand < 0] = 0
 
     # Calculate Mg isotope concentrations
     # Source for 26/24std: Isotope Geochemistry, William White, pp.365
     mg26_24 = (((isotopedata[:, 1][:,None]+delta_offsets)/1000)+1)*0.13979 # np.ones(len(isotopedata[:, 1]))*mg26_24_ocean #   # Decimal numbers are isotopic ratios of standards
     mg25_24 = (((isotopedata[:, 2][:,None]+delta_offsets)/1000)+1)*0.126635  # Estimated for now (calc'd from 26/24 value divided by 25/24 measured values)
     concunique_mg24 = isotopedata[:, 3][:,None]/(mg26_24+mg25_24+1)
-    concunique_mg25 = concunique_mg24*mg25_24
+    # concunique_mg24 = conc_rand.T/(mg26_24+mg25_24+1)
     concunique_mg26 = concunique_mg24*mg26_24
 
     isotope_concs = [concunique_mg24, concunique_mg26]
@@ -389,6 +399,7 @@ def monte_carlo_fract(cycles, Precision, concunique, bottom_temp_est, dp, por, p
 
     ###############################################################################
     # Calculate fluxes for random profiles
+
 
     # Calculate flux
     conc_fits = np.empty((cycles, len(conc_fit), 2))
@@ -443,12 +454,12 @@ def monte_carlo_fract(cycles, Precision, concunique, bottom_temp_est, dp, por, p
     # Distribution statistics
 
     # Stats on normal distribution
-    mean_epsilon = np.mean(epsilon)
-    median_epsilon = np.median(epsilon)
-    stdev_epsilon = np.std(epsilon)
-    z_score, p_value = stats.skewtest(epsilon)
+    alpha_mean = np.mean(alpha)
+    alpha_median = np.median(alpha)
+    alpha_stdev = np.std(alpha)
+    z_score, p_value = stats.skewtest(alpha)
 
-    return alpha, epsilon, cycles, por_error, mean_epsilon, median_epsilon, stdev_epsilon, z_score, p_value, runtime_errors
+    return alpha, epsilon, cycles, por_error, alpha_mean, alpha_median, alpha_stdev, z_score, p_value, runtime_errors, conc_fits, fluxes
 
 
 
@@ -522,33 +533,36 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_te
     axins1.invert_yaxis()
     return figure_1
 
-def monte_carlo_plot_fract(epsilon, median_epsilon, stdev_epsilon, z_score):
+def monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev, alpha_mean, z_score):
     mpl.rcParams['mathtext.fontset'] = 'stix'
     #mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'
     mpl.rc('font',family='serif')
-    mc_figure, (ax5) = plt.subplots(1, 1, figsize=(6, 5),gridspec_kw={'wspace':0.2,
+    mc_figure, (ax5) = plt.subplots(1, 1, figsize=(6, 5),gridspec_kw={
+                                                        'wspace':0.2,
                                                         'top':0.92,
                                                         'bottom':0.13,
                                                         'left':0.1,
                                                         'right':0.90})
 
     # Plot histogram of results
-    n_1, bins_1, patches_1 = ax5.hist(epsilon, normed=1, bins=30, facecolor='orange')
+    n_1, bins_1, patches_1 = ax5.hist(alpha, normed=1,
+                                      bins=50, facecolor='blue')
 
     # Best fit normal distribution line to results
-    bf_line_1 = mlab.normpdf(bins_1, median_epsilon, stdev_epsilon)
+    bf_line_1 = mlab.normpdf(bins_1, alpha_mean, alpha_stdev)
     ax5.plot(bins_1, bf_line_1, 'k--', linewidth=2)
     ax5.set_xlabel("$Epsilon$", fontsize=20)
-
+    ax5.locator_params(axis='x', nbins=5)
     [left_raw, right_raw] = ax5.get_xlim()
     [bottom_raw, top_raw] = ax5.get_ylim()
-    ax5.text((left_raw+(right_raw-left_raw)/20), (top_raw-(top_raw-bottom_raw)/10), "$z'\ =\ {}$".format(np.round(z_score, 2)))
-
+    ax5.text((left_raw+(right_raw-left_raw)/20),
+             (top_raw-(top_raw-bottom_raw)/10),
+             """$z-score\ =\ {}$""".format(np.round(z_score, 2)))
 
     return mc_figure
 
 
-def monte_carlo_plot(interface_fluxes, median_flux, stdev_flux, skewness, z_score, interface_fluxes_log, median_flux_log, stdev_flux_log, skewness_log, z_score_log):
+def monte_carlo_plot(interface_fluxes, mean_flux, stdev_flux, skewness, z_score, interface_fluxes_log, median_flux_log, stdev_flux_log, skewness_log, z_score_log):
     mpl.rcParams['mathtext.fontset'] = 'stix'
     #mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'
     mpl.rc('font',family='serif')
@@ -562,7 +576,7 @@ def monte_carlo_plot(interface_fluxes, median_flux, stdev_flux, skewness, z_scor
     n_1, bins_1, patches_1 = ax5.hist(interface_fluxes*1000, normed=1, bins=30, facecolor='orange')
 
     # Best fit normal distribution line to results
-    bf_line_1 = mlab.normpdf(bins_1, median_flux*1000, stdev_flux*1000)
+    bf_line_1 = mlab.normpdf(bins_1, mean_flux*1000, stdev_flux*1000)
     ax5.plot(bins_1, bf_line_1, 'k--', linewidth=2)
     ax5.set_xlabel("$Interface\ flux\ (mmol\ m^{-2}\ y^{-1})$", fontsize=20)
 
