@@ -27,10 +27,11 @@ plt.close('all')
 ###############################################################################
 ###############################################################################
 # Site Information
-Leg = '344'
-Site = 'U1414'
-Holes = "('A') or hole is null"
-dp = 4 # Number of concentration datapoints to use for exponential curve fit
+Leg = '154'
+Site = '925'
+Holes = "('A','B','E') or hole is null"
+dp = 6 # Number of concentration datapoints to use for exponential curve fit
+top_boundary = 'seawater'  # Not seawater for 1039, U1414
 
 Comments = ''
 Complete = 'yes'
@@ -45,7 +46,7 @@ Solute_db = 'Mg' # Solute label to send to the database
 
 # Model parameters
 z = 0  # Depth (meters below seafloor) at which to calculate flux
-cycles = 5000  # Monte Carlo simulations
+cycles = 500  # Monte Carlo simulations
 runtime_errors = 0
 
 # Connect to database
@@ -67,8 +68,8 @@ concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, s
 concunique = pd.DataFrame(concunique)
 concunique.columns = ['sample_depth', 'mg_conc']
 
-# For 1039
-# concunique.iloc[0,1] = concunique.iloc[1,1]
+if top_boundary != 'seawater':
+    concunique.iloc[0,1] = concunique.iloc[1,1]
 
 # Mg isotope data, combined with corresponding Mg concentrations
 sql = """select sample_depth, d26mg, d25mg, d26mg_2sd
@@ -79,6 +80,11 @@ sql = """select sample_depth, d26mg, d25mg, d26mg_2sd
     and d26mg is not NULL;""".format(Leg, Site, Holes)
 isotopedata = pd.read_sql(sql, engine)
 isotopedata = isotopedata.sort_values(by='sample_depth')
+
+# Calculate d25Mg for data from Higgins and Schrag 2010
+if isotopedata.d25mg.isnull().all():
+    isotopedata.d25mg = 0.527 * isotopedata.d26mg
+
 isotopedata_26 = data_handling.averages(isotopedata['sample_depth'],
                                         isotopedata.iloc[:, 1])
 isotopedata_25 = data_handling.averages(isotopedata['sample_depth'],
@@ -105,10 +111,12 @@ concunique_mg = concunique.reset_index(drop=True)
 isotopedata = isotopedata.as_matrix()
 
 #U1414 and U1039 don't use water column data as upper bound
-ct_d26 = [isotopedata[0,1]]  # [-0.82]
-ct_d25 = [isotopedata[0,2]]  # [-0.42]
-# ct_d26 = [-0.82]
-# ct_d25 = [-0.41]
+if top_boundary == 'seawater':
+    ct_d26 = [-0.82]
+    ct_d25 = [-0.41]
+else:
+    ct_d26 = [isotopedata[0,1]]
+    ct_d25 = [isotopedata[0,2]]
 
 mg26_24_ocean = ((ct_d26[0]/1000)+1)*0.13979
 isotopedata = np.concatenate((np.array(([0],
@@ -198,20 +206,20 @@ sql= """insert into metadata_{}_flux (site_key,leg,site,hole,solute,
 con.execute(sql)
 
 # Monte Carlo Simulation
-alpha, epsilon, cycles, por_error, alpha_mean, alpha_median, alpha_stdev, z_score, p_value, runtime_errors, conc_fits, fluxes = flux_functions.monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean)
+alpha, epsilon, cycles, por_error, alpha_mean, alpha_median, alpha_stdev, test_stat, p_value, runtime_errors, conc_fits, fluxes = flux_functions.monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean)
 
 sql= """insert into metadata_{}_flux (site_key,leg,site,hole,solute,
-               alpha_mean, alpha_median, alpha_stdev, alpha_z_score)
+               alpha_mean, alpha_median, alpha_stdev, alpha_p_value)
                VALUES ({}, '{}', '{}', '{}', '{}', {}, {}, {}, {})
                ON DUPLICATE KEY UPDATE alpha_mean={}, alpha_median={},
-               alpha_stdev={}, alpha_z_score={}
+               alpha_stdev={}, alpha_p_value={}
                ;""".format(Solute_db, site_key,Leg,Site,Hole,Solute,
-                           alpha_mean, alpha_median, alpha_stdev, z_score,
-                           alpha_mean, alpha_median, alpha_stdev, z_score)
+                           alpha_mean, alpha_median, alpha_stdev, p_value,
+                           alpha_mean, alpha_median, alpha_stdev, p_value)
 con.execute(sql)
 
 # Plot Monte Carlo Distributions
-mc_figure =flux_functions.monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev, alpha_mean, z_score)
+mc_figure =flux_functions.monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev, alpha_mean, p_value)
 mc_figure.show()
 savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output fractionation figures\interface_{}_fractionation_distribution_{}_{}.png".format(Solute_db, Leg, Site))
 

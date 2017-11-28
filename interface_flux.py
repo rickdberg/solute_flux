@@ -110,10 +110,10 @@ savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output 
 
 
 # Monte Carlo Simulation
-interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, z_score, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, z_score_log, runtime_errors = flux_functions.monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors)
+interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors = flux_functions.monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors)
 
 # Plot Monte Carlo Distributions
-mc_figure =flux_functions.monte_carlo_plot(interface_fluxes, median_flux, stdev_flux, skewness, z_score, interface_fluxes_log, median_flux_log, stdev_flux_log, skewness_log, z_score_log)
+mc_figure =flux_functions.monte_carlo_plot(interface_fluxes, median_flux, stdev_flux, skewness, p_value, interface_fluxes_log, median_flux_log, stdev_flux_log, skewness_log, p_value_log)
 mc_figure.show()
 
 # Save figure and fluxes from each run
@@ -138,9 +138,9 @@ flux_functions.flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
                            age_depth_boundaries,sedrate,advection,Precision,Ds,
                            TempD,bottom_temp,bottom_temp_est,cycles,
                            por_error,mean_flux,median_flux,stdev_flux,
-                           skewness,z_score,mean_flux_log,median_flux_log,
+                           skewness,p_value,mean_flux_log,median_flux_log,
                            stdev_flux_log,stdev_flux_lower,stdev_flux_upper,
-                           skewness_log,z_score_log,runtime_errors,Date,Comments,Complete)
+                           skewness_log,p_value_log,runtime_errors,Date,Comments,Complete)
 
 
 

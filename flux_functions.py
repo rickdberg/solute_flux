@@ -173,10 +173,10 @@ def conc_curve(z,a,b,c):
 '''
 
 def concentration_fit(concunique, dp):
-    if np.mean(concunique[1:dp,1]) < concunique[0,1]:
-        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[-0.1,10,40], bounds=([-1,-100,-1000],[1,100,1000]), method='trf')
+    if np.mean(concunique[1:dp,1]) <= concunique[0,1]:
+        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[-0.1,10,40], bounds=([-1,-1000,-1000],[1,1000,1000]), method='trf')
     else:
-        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[-0.1,-10,60], bounds=([-1,-100,-1000],[1,100,1000]), method='trf')
+        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[-0.1,-10,60], bounds=([-1,-1000,-1000],[1,1000,1000]), method='trf')
     # conc_interp_depths = np.arange(0,3,intervalthickness)  # Three equally-spaced points
     # conc_interp_fit = conc_curve(conc_interp_depths, conc_fit)  # To be used if Boudreau method for conc gradient is used
     return conc_fit
@@ -293,9 +293,10 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
         conc_rand_n[:,1] = conc_rand[n,:]
         try:
             conc_fit = concentration_fit(conc_rand_n, dp)
+            conc_fits[n,:] = conc_fit
         except RuntimeError:
             runtime_errors += 1
-        conc_fits[n,:] = conc_fit
+
 
         # Fit exponential curve to each randomized porosity profile
         por_rand_n[:,1] =  por_rand[n,:]
@@ -328,22 +329,22 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
     # Distribution statistics
 
     # Stats on normal distribution
-    mean_flux = np.mean(interface_fluxes)
-    median_flux = np.median(interface_fluxes)
-    stdev_flux = np.std(interface_fluxes)
-    skewness = stats.skew(abs(interface_fluxes))
-    z_score, p_value = stats.skewtest(abs(interface_fluxes))
+    mean_flux = np.nanmean(interface_fluxes)
+    median_flux = np.nanmedian(interface_fluxes)
+    stdev_flux = np.nanstd(interface_fluxes)
+    skewness = stats.skew(abs(interface_fluxes[~np.isnan(interface_fluxes)]))
+    test_stat, p_value = stats.kstest((interface_fluxes[~np.isnan(interface_fluxes)]-mean_flux)/stdev_flux, 'norm')
 
     # Stats on lognormal distribution
     interface_fluxes_log = -np.log(abs(interface_fluxes))
-    mean_flux_log = np.mean(interface_fluxes_log)
-    median_flux_log = np.median(interface_fluxes_log)
-    stdev_flux_log = np.std(interface_fluxes_log)
-    skewness_log = stats.skew(interface_fluxes_log)
-    z_score_log, p_value_log = stats.skewtest(interface_fluxes_log)
+    mean_flux_log = np.nanmean(interface_fluxes_log)
+    median_flux_log = np.nanmedian(interface_fluxes_log)
+    stdev_flux_log = np.nanstd(interface_fluxes_log)
+    skewness_log = stats.skew(interface_fluxes_log[~np.isnan(interface_fluxes_log)])
+    test_stat_log, p_value_log = stats.shapiro((interface_fluxes_log[~np.isnan(interface_fluxes_log)]-mean_flux_log)/stdev_flux_log)
     stdev_flux_lower = np.exp(-(median_flux_log-stdev_flux_log))
     stdev_flux_upper = np.exp(-(median_flux_log+stdev_flux_log))
-    return interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, z_score, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, z_score_log, runtime_errors
+    return interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors
 
 def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean):
     # Porosity offsets - using full gaussian probability
@@ -400,11 +401,10 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
     ###############################################################################
     # Calculate fluxes for random profiles
 
-
     # Calculate flux
-    conc_fits = np.empty((cycles, len(conc_fit), 2))
-    por_fits = np.empty(cycles)
-    pwburialfluxes = np.empty(cycles)
+    conc_fits = np.empty((cycles, len(conc_fit), 2)) * np.nan
+    por_fits = np.empty(cycles) * np.nan
+    pwburialfluxes = np.empty(cycles) *np.nan
     conc_rand_n = np.stack((isotopedata[:dp,0], np.empty(dp)), axis=1)
     por_rand_n = np.stack((por[:,0], np.empty(len(por))), axis=1)
     for n in range(cycles):
@@ -413,9 +413,9 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
             # Fit pore water concentration curve
             try:
                 conc_fit = concentration_fit(conc_rand_n, dp)
+                conc_fits[n,:,i] = conc_fit
             except RuntimeError:
                 runtime_errors += 1
-            conc_fits[n,:,i] = conc_fit
 
         # Fit exponential curve to each randomized porosity profile
         por_rand_n[:,1] =  por_rand[n,:]
@@ -428,13 +428,15 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
         pwburialflux = pw_burial(seddepths, sedtimes, por_fit, por)
         pwburialfluxes[n] = pwburialflux
 
+    # Filter out profiles where 26Mg or 24Mg were erroneously fit
+    conc_fits[np.round(conc_fits[:,0,0],2) != np.round(conc_fits[:,0,1],2)] = np.nan
+
     # Dsed vector
     tortuosity_rand = 1-np.log(portop_rand**2)
     bottom_temp_rand = bottom_temp+temp_offsets
     bottom_temp_rand[bottom_temp_rand < -2] = -2
 
     Dsed_rand = d_stp(TempD, bottom_temp_rand, Ds)/tortuosity_rand
-
 
     # Plot all the monte carlo runs
     # conc_interp_fit_plot = conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), conc_fits)
@@ -454,15 +456,12 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
     # Distribution statistics
 
     # Stats on normal distribution
-    alpha_mean = np.mean(alpha)
-    alpha_median = np.median(alpha)
-    alpha_stdev = np.std(alpha)
-    z_score, p_value = stats.skewtest(alpha)
+    alpha_mean = np.nanmean(alpha)
+    alpha_median = np.nanmedian(alpha)
+    alpha_stdev = np.nanstd(alpha)
+    test_stat, p_value = stats.kstest((alpha[~np.isnan(alpha)]-alpha_mean)/alpha_stdev, 'norm')
 
-    return alpha, epsilon, cycles, por_error, alpha_mean, alpha_median, alpha_stdev, z_score, p_value, runtime_errors, conc_fits, fluxes
-
-
-
+    return alpha, epsilon, cycles, por_error, alpha_mean, alpha_median, alpha_stdev, test_stat, p_value, runtime_errors, conc_fits, fluxes
 
 # Plotting
 def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_temp, picks, sedtimes, seddepths, Leg, Site, Solute_db, flux, dp, temp_gradient):
@@ -533,7 +532,7 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_te
     axins1.invert_yaxis()
     return figure_1
 
-def monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev, alpha_mean, z_score):
+def monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev, alpha_mean, p_value):
     mpl.rcParams['mathtext.fontset'] = 'stix'
     #mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'
     mpl.rc('font',family='serif')
@@ -545,11 +544,11 @@ def monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev, alpha_mean, z_score
                                                         'right':0.90})
 
     # Plot histogram of results
-    n_1, bins_1, patches_1 = ax5.hist(alpha, normed=1,
+    n_1, bins_1, patches_1 = ax5.hist((alpha[~np.isnan(alpha)]-1)*1000, normed=1,
                                       bins=50, facecolor='blue')
 
     # Best fit normal distribution line to results
-    bf_line_1 = mlab.normpdf(bins_1, alpha_mean, alpha_stdev)
+    bf_line_1 = mlab.normpdf(bins_1, (alpha_mean-1)*1000, alpha_stdev*1000)
     ax5.plot(bins_1, bf_line_1, 'k--', linewidth=2)
     ax5.set_xlabel("$Epsilon$", fontsize=20)
     ax5.locator_params(axis='x', nbins=5)
@@ -557,12 +556,12 @@ def monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev, alpha_mean, z_score
     [bottom_raw, top_raw] = ax5.get_ylim()
     ax5.text((left_raw+(right_raw-left_raw)/20),
              (top_raw-(top_raw-bottom_raw)/10),
-             """$z-score\ =\ {}$""".format(np.round(z_score, 2)))
+             """$K-S\ p-value\ =\ {}$""".format(np.round(p_value, 2)))
 
     return mc_figure
 
 
-def monte_carlo_plot(interface_fluxes, mean_flux, stdev_flux, skewness, z_score, interface_fluxes_log, median_flux_log, stdev_flux_log, skewness_log, z_score_log):
+def monte_carlo_plot(interface_fluxes, mean_flux, stdev_flux, skewness, p_value, interface_fluxes_log, median_flux_log, stdev_flux_log, skewness_log, p_value_log):
     mpl.rcParams['mathtext.fontset'] = 'stix'
     #mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'
     mpl.rc('font',family='serif')
@@ -573,7 +572,7 @@ def monte_carlo_plot(interface_fluxes, mean_flux, stdev_flux, skewness, z_score,
                                                         'right':0.90})
 
     # Plot histogram of results
-    n_1, bins_1, patches_1 = ax5.hist(interface_fluxes*1000, normed=1, bins=30, facecolor='orange')
+    n_1, bins_1, patches_1 = ax5.hist(interface_fluxes[~np.isnan(interface_fluxes)]*1000, normed=1, bins=30, facecolor='orange')
 
     # Best fit normal distribution line to results
     bf_line_1 = mlab.normpdf(bins_1, mean_flux*1000, stdev_flux*1000)
@@ -583,7 +582,7 @@ def monte_carlo_plot(interface_fluxes, mean_flux, stdev_flux, skewness, z_score,
     [left_raw, right_raw] = ax5.get_xlim()
     [bottom_raw, top_raw] = ax5.get_ylim()
     ax5.text((left_raw+(right_raw-left_raw)/20), (top_raw-(top_raw-bottom_raw)/20), '$sk\ =\ {}$'.format(np.round(skewness, 2)))
-    ax5.text((left_raw+(right_raw-left_raw)/20), (top_raw-(top_raw-bottom_raw)/10), "$z'\ =\ {}$".format(np.round(z_score, 2)))
+    ax5.text((left_raw+(right_raw-left_raw)/20), (top_raw-(top_raw-bottom_raw)/10), "$S-W\ p-value\ =\ {}$".format(np.round(p_value, 2)))
 
     # Plot histogram of ln(results)
     n_2, bins_2, patches_2 = ax6.hist(interface_fluxes_log, normed=1, bins=30, facecolor='g')
@@ -596,7 +595,7 @@ def monte_carlo_plot(interface_fluxes, mean_flux, stdev_flux, skewness, z_score,
     [left_log, right_log] = ax6.get_xlim()
     [bottom_log, top_log] = ax6.get_ylim()
     ax6.text((left_log+(right_log-left_log)/20), (top_log-(top_log-bottom_log)/20), '$sk\ =\ {}$'.format(np.round(skewness_log, 2)))
-    ax6.text((left_log+(right_log-left_log)/20), (top_log-(top_log-bottom_log)/10), "$z'\ =\ {}$".format(np.round(z_score_log, 2)))
+    ax6.text((left_log+(right_log-left_log)/20), (top_log-(top_log-bottom_log)/10), "$K-S\ p-value\ =\ {}$".format(np.round(p_value_log, 2)))
 
     return mc_figure
 
@@ -605,18 +604,18 @@ def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
                            age_depth_boundaries,sedrate,advection,Precision,Ds,
                            TempD,bottom_temp,bottom_temp_est,cycles,
                            por_error,mean_flux,median_flux,stdev_flux,
-                           skewness,z_score,mean_flux_log,median_flux_log,
+                           skewness,p_value,mean_flux_log,median_flux_log,
                            stdev_flux_log,stdev_flux_lower,stdev_flux_upper,
-                           skewness_log,z_score_log,runtime_errors,Date,Comments,Complete):
+                           skewness_log,p_value_log,runtime_errors,Date,Comments,Complete):
     # Send metadata to database
     sql= """insert into metadata_{}_flux (site_key,leg,site,hole,solute,
                    interface_flux,burial_flux,gradient,top_por,flux_depth,datapoints,
                    bottom_conc,conc_fit,r_squared,age_depth_boundaries,sed_rate,advection,
                    measurement_precision,ds,ds_reference_temp,bottom_temp,
                    bottom_temp_est,mc_cycles,porosity_error,mean_flux,median_flux,
-                   stdev_flux,skewness,z_score,mean_flux_log,median_flux_log,
+                   stdev_flux,skewness,p_value,mean_flux_log,median_flux_log,
                    stdev_flux_log,stdev_flux_lower,stdev_flux_upper,skewness_log,
-                   z_score_log,runtime_errors,run_date,comments,complete)
+                   p_value_log,runtime_errors,run_date,comments,complete)
                    VALUES ({}, '{}', '{}', '{}', '{}', {}, {}, {}, {}, {}, {},
                    {}, '{}', {},'{}', {}, {}, {}, {}, {}, {}, '{}', {}, {}, {}, {},
                    {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},'{}','{}', '{}')
@@ -627,9 +626,9 @@ def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
                    measurement_precision={}, ds={}, ds_reference_temp={},
                    bottom_temp={}, bottom_temp_est='{}', mc_cycles={},
                    porosity_error={}, mean_flux={}, median_flux={},
-                   stdev_flux={}, skewness={}, z_score={}, mean_flux_log={},
+                   stdev_flux={}, skewness={}, p_value={}, mean_flux_log={},
                    median_flux_log={}, stdev_flux_log={}, stdev_flux_lower={},
-                   stdev_flux_upper={}, skewness_log={}, z_score_log={},runtime_errors={},
+                   stdev_flux_upper={}, skewness_log={}, p_value_log={},runtime_errors={},
                    run_date='{}', comments='{}', complete='{}'
                    ;""".format(Solute_db, site_key,Leg,Site,Hole,Solute,
                                flux,burial_flux,gradient,porosity,
@@ -638,9 +637,9 @@ def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
                                Precision,Ds,TempD,
                                bottom_temp,bottom_temp_est,cycles,
                                por_error,mean_flux,median_flux,stdev_flux,
-                               skewness,z_score,mean_flux_log,median_flux_log,
+                               skewness,p_value,mean_flux_log,median_flux_log,
                                stdev_flux_log,stdev_flux_lower,stdev_flux_upper,
-                               skewness_log,z_score_log,runtime_errors,Date,Comments,Complete,
+                               skewness_log,p_value_log,runtime_errors,Date,Comments,Complete,
                                Hole,Solute,
                                flux,burial_flux,gradient,porosity,
                                z,dp,bottom_conc,conc_fit,r_squared,
@@ -648,9 +647,9 @@ def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
                                Precision,Ds,TempD,
                                bottom_temp,bottom_temp_est,cycles,
                                por_error,mean_flux,median_flux,stdev_flux,
-                               skewness,z_score,mean_flux_log,median_flux_log,
+                               skewness,p_value,mean_flux_log,median_flux_log,
                                stdev_flux_log,stdev_flux_lower,stdev_flux_upper,
-                               skewness_log,z_score_log,runtime_errors,Date,Comments,Complete)
+                               skewness_log,p_value_log,runtime_errors,Date,Comments,Complete)
     con.execute(sql)
 
 
