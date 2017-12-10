@@ -163,8 +163,8 @@ def rsq(modeled, measured):
     return 1-sse/sstotal
 
 # Fit exponential curve to concentration datapoints (specified as "dp")
-def conc_curve(z,a,b,c):
-    return b * np.exp(np.multiply(a,z)) + c  # a = (v - sqrt(v**2 * 4Dk))/2D
+def conc_curve(z,a,b,c,d):
+    return b * np.exp(np.multiply(a,z)) + c * z + d  # a = (v - sqrt(v**2 * 4Dk))/2D
 '''def conc_curve(z, a, b, k):
     return a*np.sin(np.sqrt(k)*z)+b*np.cos(np.sqrt(k)*z)
 '''
@@ -173,10 +173,14 @@ def conc_curve(z,a,b,c):
 '''
 
 def concentration_fit(concunique, dp):
+    a0 = -0.1
+    b0 = concunique[0,1]/5
+    c0 = concunique[0,1]/5000
+    d0 = concunique[0,1]
     if np.mean(concunique[1:dp,1]) <= concunique[0,1]:
-        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[-0.1,10,40], bounds=([-1,-1000,-1000],[1,1000,1000]), method='trf')
+        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[a0,b0,-c0,d0], bounds=([-1,-1000,-100,-1000],[1,1000,100,1000]), method='trf')
     else:
-        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[-0.1,-10,60], bounds=([-1,-1000,-1000],[1,1000,1000]), method='trf')
+        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[-a0,-b0,c0,d0], bounds=([-1,-1000,-100,-1000],[1,1000,100,1000]), method='trf')
     # conc_interp_depths = np.arange(0,3,intervalthickness)  # Three equally-spaced points
     # conc_interp_fit = conc_curve(conc_interp_depths, conc_fit)  # To be used if Boudreau method for conc gradient is used
     return conc_fit
@@ -221,7 +225,7 @@ def pw_burial(seddepths, sedtimes, por_fit, por):
 # Flux model
 def flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed, advection, dp, Site):
     # gradient = (-3*conc_interp_fit[0] + 4*conc_interp_fit[1] - conc_interp_fit[2])/(2*intervalthickness)  # Approximation according to Boudreau 1997 Diagenetic Models and Their Implementation. Matches well with derivative method
-    gradient = conc_fit[1] * conc_fit[0] * np.exp(np.multiply(conc_fit[0], z))
+    gradient = conc_fit[1] * conc_fit[0] * np.exp(np.multiply(conc_fit[0], z)) + conc_fit[2]
     # gradient = (concunique[0, 1] - concunique[dp-1, 1]) * -a * np.exp(-a * z)  # Derivative of conc_curve @ z
     burial_flux = pwburialflux * conc_curve(z, *conc_fit)
     flux = porosity * Dsed * -gradient + (porosity * advection + pwburialflux) * conc_curve(z, *conc_fit)
@@ -283,17 +287,17 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
     conc_rand[conc_rand < 0] = 0
 
     # Calculate flux
-    conc_fits = np.empty((cycles, len(conc_fit)))
-    por_fits = np.empty(cycles)
-    pwburialfluxes = np.empty(cycles)
-    conc_rand_n = np.stack((concunique[:dp,0], np.empty(dp)), axis=1)
-    por_rand_n = np.stack((por[:,0], np.empty(len(por))), axis=1)
+    conc_fits = np.zeros((cycles, len(conc_fit))) * np.nan
+    por_fits = np.zeros(cycles) * np.nan
+    pwburialfluxes = np.zeros(cycles) * np.nan
+    conc_rand_n = np.stack((concunique[:dp,0], np.zeros(dp) * np.nan), axis=1)
+    por_rand_n = np.stack((por[:,0], np.zeros(len(por)) * np.nan), axis=1)
     for n in range(cycles):
         # Fit exponential curve to each randomized concentration profile
         conc_rand_n[:,1] = conc_rand[n,:]
         try:
-            conc_fit = concentration_fit(conc_rand_n, dp)
-            conc_fits[n,:] = conc_fit
+            conc_fit2 = concentration_fit(conc_rand_n, dp)
+            conc_fits[n,:] = conc_fit2
         except RuntimeError:
             runtime_errors += 1
 
@@ -309,6 +313,10 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
         pwburialflux = pw_burial(seddepths, sedtimes, por_fit, por)
         pwburialfluxes[n] = pwburialflux
 
+    # Filter out profiles erroneously fit
+    conc_fits[abs(conc_fits[:,0] - conc_fit[0]) > 0.33 * abs(conc_fits[:,0] + conc_fit[0])/2] = np.nan
+
+
     # Dsed vector
     tortuosity_rand = 1-np.log(portop_rand**2)
     bottom_temp_rand = bottom_temp+temp_offsets
@@ -323,7 +331,7 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
 
     # Calculate fluxes
     gradient = conc_fits[:,1] * conc_fits[:,0] * np.exp(np.multiply(conc_fits[:,0], z))
-    interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(z, conc_fits[:,0], conc_fits[:,1], conc_fits[:,2])
+    interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(z, conc_fits[:,0], conc_fits[:,1], conc_fits[:,2], conc_fits[:,3])
 
     ###############################################################################
     # Distribution statistics
@@ -341,7 +349,7 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
     median_flux_log = np.nanmedian(interface_fluxes_log)
     stdev_flux_log = np.nanstd(interface_fluxes_log)
     skewness_log = stats.skew(interface_fluxes_log[~np.isnan(interface_fluxes_log)])
-    test_stat_log, p_value_log = stats.shapiro((interface_fluxes_log[~np.isnan(interface_fluxes_log)]-mean_flux_log)/stdev_flux_log)
+    test_stat_log, p_value_log = stats.kstest((interface_fluxes_log[~np.isnan(interface_fluxes_log)]-mean_flux_log)/stdev_flux_log, 'norm')
     stdev_flux_lower = np.exp(-(median_flux_log-stdev_flux_log))
     stdev_flux_upper = np.exp(-(median_flux_log+stdev_flux_log))
     return interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors
@@ -402,11 +410,11 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
     # Calculate fluxes for random profiles
 
     # Calculate flux
-    conc_fits = np.empty((cycles, len(conc_fit), 2)) * np.nan
-    por_fits = np.empty(cycles) * np.nan
-    pwburialfluxes = np.empty(cycles) *np.nan
-    conc_rand_n = np.stack((isotopedata[:dp,0], np.empty(dp)), axis=1)
-    por_rand_n = np.stack((por[:,0], np.empty(len(por))), axis=1)
+    conc_fits = np.zeros((cycles, len(conc_fit), 2)) * np.nan
+    por_fits = np.zeros(cycles) * np.nan
+    pwburialfluxes = np.zeros(cycles) *np.nan
+    conc_rand_n = np.stack((isotopedata[:dp,0], np.zeros(dp) * np.nan), axis=1)
+    por_rand_n = np.stack((por[:,0], np.zeros(len(por)) * np.nan), axis=1)
     for n in range(cycles):
         for i in np.arange(2):
             conc_rand_n[:,1] = isotope_concs[i][:dp,n]
@@ -429,7 +437,7 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
         pwburialfluxes[n] = pwburialflux
 
     # Filter out profiles where 26Mg or 24Mg were erroneously fit
-    conc_fits[np.round(conc_fits[:,0,0],2) != np.round(conc_fits[:,0,1],2)] = np.nan
+    conc_fits[abs(conc_fits[:,0,0] - conc_fits[:,0,1]) > 0.05 * abs(conc_fits[:,0,0] + conc_fits[:,0,1])/2] = np.nan
 
     # Dsed vector
     tortuosity_rand = 1-np.log(portop_rand**2)
@@ -446,7 +454,7 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
     fluxes = []
     for i in np.arange(2):
         gradient = conc_fits[:,1,i] * conc_fits[:,0,i] * np.exp(np.multiply(conc_fits[:,0,i], z))
-        interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(z, conc_fits[:,0,i], conc_fits[:,1,i], conc_fits[:,2,i])
+        interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(z, conc_fits[:,0,i], conc_fits[:,1,i], conc_fits[:,2,i],conc_fits[:,3,i])
         fluxes.append(interface_fluxes)
     mg26_24_flux = fluxes[1]/fluxes[0]
     alpha = mg26_24_flux/mg26_24_ocean
@@ -582,10 +590,10 @@ def monte_carlo_plot(interface_fluxes, mean_flux, stdev_flux, skewness, p_value,
     [left_raw, right_raw] = ax5.get_xlim()
     [bottom_raw, top_raw] = ax5.get_ylim()
     ax5.text((left_raw+(right_raw-left_raw)/20), (top_raw-(top_raw-bottom_raw)/20), '$sk\ =\ {}$'.format(np.round(skewness, 2)))
-    ax5.text((left_raw+(right_raw-left_raw)/20), (top_raw-(top_raw-bottom_raw)/10), "$S-W\ p-value\ =\ {}$".format(np.round(p_value, 2)))
+    ax5.text((left_raw+(right_raw-left_raw)/20), (top_raw-(top_raw-bottom_raw)/10), "$K-S\ p-value\ =\ {}$".format(np.round(p_value, 2)))
 
     # Plot histogram of ln(results)
-    n_2, bins_2, patches_2 = ax6.hist(interface_fluxes_log, normed=1, bins=30, facecolor='g')
+    n_2, bins_2, patches_2 = plt.hist(interface_fluxes_log[~np.isnan(interface_fluxes_log)], normed=1, bins=30, facecolor='g')
 
     # Best fit normal distribution line to ln(results)
     bf_line_2 = mlab.normpdf(bins_2, median_flux_log, stdev_flux_log)

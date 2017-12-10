@@ -24,12 +24,12 @@ Script = os.path.basename(__file__)
 Date = datetime.datetime.now()
 
 # Site ID
-Leg = '64'
-Site = '474'
-Holes = "('','A')"
+Leg = '199'
+Site = '1219'
+Holes = "('','A','B')"
 Bottom_boundary = 'none' # 'none', or an integer depth
 # age_depth_boundaries = [0, 4, 7] # Index when sorted by age
-age_depth_boundaries = [0,2,7,15] # Index when sorted by depth
+age_depth_boundaries = [0,4,15,22,32] # Index when sorted by depth
 top_age = 0  # years
 
 ###############################################################################

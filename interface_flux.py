@@ -28,21 +28,21 @@ plt.close('all')
 ###############################################################################
 ###############################################################################
 # Site Information
-Leg = '315'
-Site = 'C0002'
-Holes = "('B','D') or hole is null"
-dp = 2 # Number of concentration datapoints to use for exponential curve fit
+Leg = 'NGHP01'
+Site = 'NGHP18'
+Holes = "('A') or hole is null"
+dp = 13 # Number of concentration datapoints to use for exponential curve fit
 
 Comments = ''
 Complete = 'yes'
 
 # Species parameters
-Solute = 'B'  # Change to Mg_ic if needed, based on what's available in database
-Ds = 3.629*10**-2  # m^2 per year free diffusion coefficient at 18C (ref?)
+Solute = 'Mg'  # Change to Mg_ic if needed, based on what's available in database
+Ds = 1.875*10**-2  # m^2 per year free diffusion coefficient at 18C (ref?)
 TempD = 18  # Temperature at which diffusion coefficient is known
-Precision = 0.03  # measurement precision
-Ocean = 450  # Concentration in modern ocean
-Solute_db = 'B' # Solute label to send to the database
+Precision = 0.02  # measurement precision
+Ocean = 54  # Concentration in modern ocean
+Solute_db = 'Mg' # Solute label to send to the database
 
 # Model parameters
 z = 0  # Depth (meters below seafloor) at which to calculate flux
@@ -64,11 +64,7 @@ Hole = ''.join(filter(str.isupper, filter(str.isalpha, Holes)))  # Formatting fo
 # Load and prepare all input data
 site_metadata = metadata_compiler(engine, metadata_table, site_info, hole_info, Leg, Site)
 
-# dp = int(site_metadata.datapoints[0])
-# Comments = site_metadata.comments[0]
-
 concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = flux_functions.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
-concunique[1:,1] = concunique[1:,1]
 
 # Fit pore water concentration curve
 conc_fit = flux_functions.concentration_fit(concunique, dp)

@@ -21,36 +21,38 @@ import matplotlib.pyplot as plt
 from site_metadata_compiler_completed import comp
 
 database = "mysql://root:neogene227@localhost/iodp_compiled"
-metadata = "metadata_li_flux"
+metadata = "metadata_mg_flux"
 site_info = "site_info"
 hole_info = "summary_all"
 
 # Load site data
 data = comp(database, metadata, site_info, hole_info)
+data = data[data['alpha'].notnull()]
+data['alpha'] = (data['alpha'].astype(float) - 1) * 1000
 
 # Geographic patterns
-size = abs(data['interface_flux'].astype(float)*10000000)
-color = data['interface_flux'].astype(float)
+size = abs(data['alpha'].astype(float)*100)
+color = data['alpha'].astype(float)
 
 plt.scatter(data['lon'], data['lat'], cmap='seismic',
             c=color, s=size)
-plt.clim(vmin=-max(abs(color)), vmax = max(abs(color)))
+plt.clim(vmin=min(color), vmax = -min(color))
 plt.xlim((-180,180))
 plt.ylim((-90,90))
 plt.colorbar(shrink=0.5)
 plt.show()
 
 # Direct comparison
-plt.scatter(data['interface_flux'].astype(float),
-            data['sed_rate'].astype(float), s= 100,
+plt.scatter(data['alpha'].astype(float),
+            data['interface_flux'].astype(float), s= 100,
             c='b')
 plt.show()
 
 # Histogram
-d = data['interface_flux'].astype(float)*1000
-h = d.hist(bins=200)
+d = data['alpha'].astype(float)*1
+h = d.hist(bins=100)
 h.set_ylabel('$Count$', fontsize=20)
-h.set_xlabel('$Li\ Flux\ (mmol\ m^{-2}\ y^{-1})$', fontsize=20)
+h.set_xlabel('$Mg\ Flux\ (mmol\ m^{-2}\ y^{-1})$', fontsize=20)
 plt.show()
 
 #data = data.loc[data['datapoints'].astype(float) > 2]

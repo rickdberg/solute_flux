@@ -27,11 +27,11 @@ plt.close('all')
 ###############################################################################
 ###############################################################################
 # Site Information
-Leg = '154'
-Site = '925'
-Holes = "('A','B','E') or hole is null"
-dp = 6 # Number of concentration datapoints to use for exponential curve fit
-top_boundary = 'seawater'  # Not seawater for 1039, U1414
+Leg = 'NGHP01'
+Site = 'NGHP18'
+Holes = "('A') or hole is null"
+dp = 4 # Number of concentration datapoints to use for exponential curve fit
+top_boundary = 'seawater'
 
 Comments = ''
 Complete = 'yes'
@@ -46,7 +46,7 @@ Solute_db = 'Mg' # Solute label to send to the database
 
 # Model parameters
 z = 0  # Depth (meters below seafloor) at which to calculate flux
-cycles = 500  # Monte Carlo simulations
+cycles = 50  # Monte Carlo simulations
 runtime_errors = 0
 
 # Connect to database
@@ -85,6 +85,8 @@ isotopedata = isotopedata.sort_values(by='sample_depth')
 if isotopedata.d25mg.isnull().all():
     isotopedata.d25mg = 0.527 * isotopedata.d26mg
 
+isotopedata = isotopedata[isotopedata.notnull().all(axis=1)]
+
 isotopedata_26 = data_handling.averages(isotopedata['sample_depth'],
                                         isotopedata.iloc[:, 1])
 isotopedata_25 = data_handling.averages(isotopedata['sample_depth'],
@@ -99,7 +101,7 @@ isotopedata = pd.DataFrame(np.concatenate((isotopedata_26,
                                            isotopedata_25.iloc[:, 1][:, None]),
                                           axis=1),
                            columns=['sample_depth', 'd26Mg', 'd25Mg'])
-isotopedata = isotopedata[isotopedata.notnull().all(axis=1)]
+
 #concunique_mg = concunique_mg.reset_index(drop=True)
 #concunique_mg.index = concunique_mg.index - 1
 isotopedata = pd.merge(isotopedata,
@@ -222,5 +224,8 @@ con.execute(sql)
 mc_figure =flux_functions.monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev, alpha_mean, p_value)
 mc_figure.show()
 savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output fractionation figures\interface_{}_fractionation_distribution_{}_{}.png".format(Solute_db, Leg, Site))
+
+print("Mean Epsilon:", round((alpha_mean-1)*1000, 4))
+print("SD Epsilon:", round(alpha_stdev*1000, 4))
 
 # eof
