@@ -27,11 +27,13 @@ plt.close('all')
 ###############################################################################
 ###############################################################################
 # Site Information
-Leg = 'NGHP01'
-Site = 'NGHP18'
-Holes = "('A') or hole is null"
+Leg = '154'
+Site = '925'
+Holes = "('A','B','E') or hole is null"
 dp = 4 # Number of concentration datapoints to use for exponential curve fit
 top_boundary = 'seawater'
+line_fit = 'exponential'
+
 
 Comments = ''
 Complete = 'yes'
@@ -163,14 +165,14 @@ fluxes = []
 for n in np.arange(2):
     concunique = np.array(isotope_concs[n])
     # Fit pore water concentration curve
-    conc_fit = flux_functions.concentration_fit(concunique, dp)
-    conc_interp_fit_plot = flux_functions.conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), *conc_fit)
+    conc_fit = flux_functions.concentration_fit(concunique, dp, line_fit)
+    conc_interp_fit_plot = flux_functions.conc_curve(line_fit)(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), *conc_fit)
 
     # R-squared function
-    r_squared = flux_functions.rsq(flux_functions.conc_curve(concunique[:dp,0], *conc_fit), concunique[:dp,1])
+    r_squared = flux_functions.rsq(flux_functions.conc_curve(line_fit)(concunique[:dp,0], *conc_fit), concunique[:dp,1])
 
     # Calculate solute flux
-    flux, burial_flux, gradient = flux_functions.flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed, advection, dp, Site)
+    flux, burial_flux, gradient = flux_functions.flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed, advection, dp, Site, line_fit)
 
     # Plot input data
     plt.ioff()
@@ -208,7 +210,7 @@ sql= """insert into metadata_{}_flux (site_key,leg,site,hole,solute,
 con.execute(sql)
 
 # Monte Carlo Simulation
-alpha, epsilon, cycles, por_error, alpha_mean, alpha_median, alpha_stdev, test_stat, p_value, runtime_errors, conc_fits, fluxes = flux_functions.monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean)
+alpha, epsilon, cycles, por_error, alpha_mean, alpha_median, alpha_stdev, test_stat, p_value, runtime_errors, conc_fits, fluxes = flux_functions.monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean, line_fit)
 
 sql= """insert into metadata_{}_flux (site_key,leg,site,hole,solute,
                alpha_mean, alpha_median, alpha_stdev, alpha_p_value)

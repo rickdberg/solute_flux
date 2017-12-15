@@ -18,12 +18,11 @@ import matplotlib.gridspec as gridspec
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 from matplotlib import mlab
-
+from scipy import optimize
 
 import seawater
 
 from data_handling import averages
-from scipy import optimize
 
 
 # Get site data and prepare for modeling
@@ -162,16 +161,37 @@ def rsq(modeled, measured):
     sstotal = (len(measured)-1)*np.var(measured)
     return 1-sse/sstotal
 
-# Fit exponential curve to concentration datapoints (specified as "dp")
-def conc_curve(z,a,b,c,d):
-    return b * np.exp(np.multiply(a,z)) + c * z + d  # a = (v - sqrt(v**2 * 4Dk))/2D
-'''def conc_curve(z, a, b, k):
-    return a*np.sin(np.sqrt(k)*z)+b*np.cos(np.sqrt(k)*z)
-'''
-'''def conc_curve(z, a):
-    return (concunique[0,1]-concunique[dp-1,1]) * np.exp(np.multiply(np.multiply(-1, a), z)) + concunique[dp-1,1]
-'''
+def conc_curve(line_fit):
+    if line_fit == 'exponential':
+        def conc_curve_specific(z,a,b,c):
+            return b * np.exp(np.multiply(a,z)) + c # a = (v - sqrt(v**2 * 4Dk))/2D
+    elif line_fit == 'linear':
+        def conc_curve_specific(z,a,b):
+            return a * z + b
+    return conc_curve_specific
 
+def concentration_fit(concunique, dp, line_fit):
+    if line_fit == 'exponential':
+        a0 = -0.1
+        b0 = concunique[0,1]/5
+        c0 = concunique[0,1]
+        if np.mean(concunique[1:dp,1]) <= concunique[0,1]:
+            conc_fit, conc_cov = optimize.curve_fit(conc_curve(line_fit), concunique[:dp,0], concunique[:dp,1], p0=[a0,b0,c0], bounds=([-1,-1000,-1000],[1,1000,1000]), method='trf')
+        else:
+            conc_fit, conc_cov = optimize.curve_fit(conc_curve(line_fit), concunique[:dp,0], concunique[:dp,1], p0=[-a0,-b0,c0], bounds=([-1,-1000,-1000],[1,1000,1000]), method='trf')
+    elif line_fit == 'linear':
+        a0 = 1
+        b0 = 20
+        if np.mean(concunique[1:dp,1]) <= concunique[0,1]:
+            conc_fit, conc_cov = optimize.curve_fit(conc_curve(line_fit), concunique[:dp,0], concunique[:dp,1], p0=[-a0,b0], bounds=([-10,-1000],[10,1000]), method='trf')
+        else:
+            conc_fit, conc_cov = optimize.curve_fit(conc_curve(line_fit), concunique[:dp,0], concunique[:dp,1], p0=[a0,b0], bounds=([-10,-1000],[10,1000]), method='trf')
+    # conc_interp_depths = np.arange(0,3,intervalthickness)  # Three equally-spaced points
+    # conc_interp_fit = conc_curve(conc_interp_depths, conc_fit)  # To be used if Boudreau method for conc gradient is used
+    return conc_fit
+
+"""
+# More complex concentration fit, not general enough
 def concentration_fit(concunique, dp):
     a0 = -0.1
     b0 = concunique[0,1]/5
@@ -184,6 +204,7 @@ def concentration_fit(concunique, dp):
     # conc_interp_depths = np.arange(0,3,intervalthickness)  # Three equally-spaced points
     # conc_interp_fit = conc_curve(conc_interp_depths, conc_fit)  # To be used if Boudreau method for conc gradient is used
     return conc_fit
+"""
 
 # Porosity and solids fraction functions and data preparation
 
@@ -223,16 +244,18 @@ def pw_burial(seddepths, sedtimes, por_fit, por):
     return pwburialflux
 
 # Flux model
-def flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed, advection, dp, Site):
-    # gradient = (-3*conc_interp_fit[0] + 4*conc_interp_fit[1] - conc_interp_fit[2])/(2*intervalthickness)  # Approximation according to Boudreau 1997 Diagenetic Models and Their Implementation. Matches well with derivative method
-    gradient = conc_fit[1] * conc_fit[0] * np.exp(np.multiply(conc_fit[0], z)) + conc_fit[2]
-    # gradient = (concunique[0, 1] - concunique[dp-1, 1]) * -a * np.exp(-a * z)  # Derivative of conc_curve @ z
-    burial_flux = pwburialflux * conc_curve(z, *conc_fit)
-    flux = porosity * Dsed * -gradient + (porosity * advection + pwburialflux) * conc_curve(z, *conc_fit)
+def flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed, advection, dp, Site, line_fit):
+    if line_fit == 'exponential':
+        # gradient = (-3*conc_interp_fit[0] + 4*conc_interp_fit[1] - conc_interp_fit[2])/(2*intervalthickness)  # Approximation according to Boudreau 1997 Diagenetic Models and Their Implementation. Matches well with derivative method
+        gradient = conc_fit[1] * conc_fit[0] * np.exp(np.multiply(conc_fit[0], z))  # Derivative of conc_curve @ z
+    elif line_fit == 'linear':
+        gradient = conc_fit[0]
+    burial_flux = pwburialflux * conc_curve(line_fit)(z, *conc_fit)
+    flux = porosity * Dsed * -gradient + (porosity * advection + pwburialflux) * conc_curve(line_fit)(z, *conc_fit)
     print('Site:', Site, 'Flux (mol/m^2 y^-1):', flux)
     return flux, burial_flux, gradient
 
-def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors):
+def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit):
     # Porosity offsets - using full gaussian probability
     por_offsets = np.random.normal(scale=por_error, size=(cycles, len(por[:,1])))
 
@@ -296,7 +319,7 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
         # Fit exponential curve to each randomized concentration profile
         conc_rand_n[:,1] = conc_rand[n,:]
         try:
-            conc_fit2 = concentration_fit(conc_rand_n, dp)
+            conc_fit2 = concentration_fit(conc_rand_n, dp, line_fit)
             conc_fits[n,:] = conc_fit2
         except RuntimeError:
             runtime_errors += 1
@@ -314,7 +337,8 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
         pwburialfluxes[n] = pwburialflux
 
     # Filter out profiles erroneously fit
-    conc_fits[abs(conc_fits[:,0] - conc_fit[0]) > 0.33 * abs(conc_fits[:,0] + conc_fit[0])/2] = np.nan
+    if line_fit == 'exponential':
+        conc_fits[abs(conc_fits[:,0] - conc_fit[0]) > 0.33 * abs(conc_fits[:,0] + conc_fit[0])/2] = np.nan
 
 
     # Dsed vector
@@ -330,8 +354,12 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
     # por_interp_fit_plot = conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), conc_fits)
 
     # Calculate fluxes
-    gradient = conc_fits[:,1] * conc_fits[:,0] * np.exp(np.multiply(conc_fits[:,0], z))
-    interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(z, conc_fits[:,0], conc_fits[:,1], conc_fits[:,2], conc_fits[:,3])
+    if line_fit == 'exponential':
+        gradient = conc_fits[:,1] * conc_fits[:,0] * np.exp(np.multiply(conc_fits[:,0], z))
+        interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(line_fit)(z, conc_fits[:,0], conc_fits[:,1], conc_fits[:,2])
+    elif line_fit == 'linear':
+        gradient = conc_fits[:,0]
+        interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(line_fit)(z, conc_fits[:,0], conc_fits[:,1])
 
     ###############################################################################
     # Distribution statistics
@@ -354,7 +382,7 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
     stdev_flux_upper = np.exp(-(median_flux_log+stdev_flux_log))
     return interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors
 
-def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean):
+def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean, line_fit):
     # Porosity offsets - using full gaussian probability
     por_offsets = np.random.normal(scale=por_error, size=(cycles, len(por[:,1])))
 
@@ -420,7 +448,7 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
             conc_rand_n[:,1] = isotope_concs[i][:dp,n]
             # Fit pore water concentration curve
             try:
-                conc_fit = concentration_fit(conc_rand_n, dp)
+                conc_fit = concentration_fit(conc_rand_n, dp, line_fit)
                 conc_fits[n,:,i] = conc_fit
             except RuntimeError:
                 runtime_errors += 1
@@ -437,7 +465,8 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
         pwburialfluxes[n] = pwburialflux
 
     # Filter out profiles where 26Mg or 24Mg were erroneously fit
-    conc_fits[abs(conc_fits[:,0,0] - conc_fits[:,0,1]) > 0.05 * abs(conc_fits[:,0,0] + conc_fits[:,0,1])/2] = np.nan
+    if line_fit == 'exponential':
+        conc_fits[abs(conc_fits[:,0,0] - conc_fits[:,0,1]) > 0.05 * abs(conc_fits[:,0,0] + conc_fits[:,0,1])/2] = np.nan
 
     # Dsed vector
     tortuosity_rand = 1-np.log(portop_rand**2)
@@ -453,8 +482,12 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
     # Calculate fluxes
     fluxes = []
     for i in np.arange(2):
-        gradient = conc_fits[:,1,i] * conc_fits[:,0,i] * np.exp(np.multiply(conc_fits[:,0,i], z))
-        interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(z, conc_fits[:,0,i], conc_fits[:,1,i], conc_fits[:,2,i],conc_fits[:,3,i])
+        if line_fit == 'exponential':
+            gradient = conc_fits[:,1,i] * conc_fits[:,0,i] * np.exp(np.multiply(conc_fits[:,0,i], z))
+            interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(line_fit)(z, conc_fits[:,0,i], conc_fits[:,1,i], conc_fits[:,2,i])
+        elif line_fit == 'linear':
+            gradient = conc_fits[:,0,i]
+            interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(line_fit)(z, conc_fits[:,0,i], conc_fits[:,1,i])
         fluxes.append(interface_fluxes)
     mg26_24_flux = fluxes[1]/fluxes[0]
     alpha = mg26_24_flux/mg26_24_ocean

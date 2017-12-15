@@ -27,11 +27,11 @@ plt.close('all')
 ###############################################################################
 ###############################################################################
 # Site Information
-Leg = 'NGHP01'
-Site = 'NGHP18'
-Holes = "('A') or hole is null"
-dp = 13  # Number of concentration datapoints to use for exponential curve fit
-
+Leg = '154'
+Site = '925'
+Holes = "('A','B','E') or hole is null"
+dp = 15  # Number of concentration datapoints to use for exponential curve fit
+line_fit = 'linear'
 
 
 
@@ -70,11 +70,11 @@ site_metadata = metadata_compiler(engine, metadata_table, site_info, hole_info, 
 concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = flux_functions.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
 concunique[1:,1] = concunique[1:,1]
 # Fit pore water concentration curve
-conc_fit = flux_functions.concentration_fit(concunique, dp)
-conc_interp_fit_plot = flux_functions.conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), *conc_fit)
+conc_fit = flux_functions.concentration_fit(concunique, dp, line_fit)
+conc_interp_fit_plot = flux_functions.conc_curve(line_fit)(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), *conc_fit)
 
 # R-squared function
-r_squared = flux_functions.rsq(flux_functions.conc_curve(concunique[:dp,0], *conc_fit), concunique[:dp,1])
+r_squared = flux_functions.rsq(flux_functions.conc_curve(line_fit)(concunique[:dp,0], *conc_fit), concunique[:dp,1])
 
 # Fit porosity curve
 por = data_handling.averages(pordata[:, 0], pordata[:, 1])  # Average duplicates
@@ -97,7 +97,7 @@ Dsed = D_in_situ/tortuosity  # Effective diffusion coefficient
 pwburialflux = flux_functions.pw_burial(seddepths, sedtimes, por_fit, por)
 
 # Calculate solute flux
-flux, burial_flux, gradient = flux_functions.flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed, advection, dp, Site)
+flux, burial_flux, gradient = flux_functions.flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed, advection, dp, Site, line_fit)
 
 # Plot input data
 plt.ioff()
