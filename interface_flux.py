@@ -28,10 +28,11 @@ plt.close('all')
 ###############################################################################
 ###############################################################################
 # Site Information
-Leg = '154'
-Site = '925'
-Holes = "('A','B','E') or hole is null"
-dp = 15  # Number of concentration datapoints to use for exponential curve fit
+# Site Information
+Leg = '199'
+Site = '1219'
+Holes = "('A','B') or hole is null"
+dp = 7  # Number of concentration datapoints to use for exponential curve fit
 line_fit = 'exponential'
 
 Comments = ''

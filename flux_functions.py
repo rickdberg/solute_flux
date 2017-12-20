@@ -257,6 +257,9 @@ def flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed, advection,
 
 def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit):
     # Porosity offsets - using full gaussian probability
+    portop = np.max(por[:3,1])
+    if por_error == 0:
+        por_error = 0.08 * portop
     por_offsets = np.random.normal(scale=por_error, size=(cycles, len(por[:,1])))
 
     # Get randomized porosity matrix (within realistic ranges between 30% and 90%)
@@ -264,7 +267,6 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
     por_rand[por_rand > 0.90] = 0.90
     por_rand[por_rand < 0.30] = 0.30
 
-    portop = np.max(por[:3,1])
     portop_rand = np.add(portop, por_offsets[:,0])
     portop_rand = portop_rand[portop_rand > por_curve(por[-1,0], por, *por_fit)]
     portop_rand = portop_rand[portop_rand < 0.90]
@@ -316,18 +318,17 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
     conc_rand_n = np.stack((concunique[:dp,0], np.zeros(dp) * np.nan), axis=1)
     por_rand_n = np.stack((por[:,0], np.zeros(len(por)) * np.nan), axis=1)
     for n in range(cycles):
+        # Fit exponential curve to each randomized porosity profile
         # Fit exponential curve to each randomized concentration profile
         conc_rand_n[:,1] = conc_rand[n,:]
+        por_rand_n[:,1] =  por_rand[n,:]
         try:
+            por_fit = porosity_fit(por_rand_n)
             conc_fit2 = concentration_fit(conc_rand_n, dp, line_fit)
-            conc_fits[n,:] = conc_fit2
         except RuntimeError:
             runtime_errors += 1
 
-
-        # Fit exponential curve to each randomized porosity profile
-        por_rand_n[:,1] =  por_rand[n,:]
-        por_fit = porosity_fit(por_rand_n)
+        conc_fits[n,:] = conc_fit2
         por_fits[n] = por_fit
 
         # Pore water burial mass flux

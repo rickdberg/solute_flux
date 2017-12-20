@@ -31,7 +31,7 @@ Leg = '154'
 Site = '925'
 Holes = "('A','B','E') or hole is null"
 dp = 15  # Number of concentration datapoints to use for exponential curve fit
-line_fit = 'linear'
+line_fit = 'exponential'
 
 
 

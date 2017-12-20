@@ -27,12 +27,12 @@ plt.close('all')
 ###############################################################################
 ###############################################################################
 # Site Information
-Leg = '154'
-Site = '925'
-Holes = "('A','B','E') or hole is null"
-dp = 4 # Number of concentration datapoints to use for exponential curve fit
+Leg = '199'
+Site = '1219'
+Holes = "('A','B') or hole is null"
+dp = 4  # Number of concentration datapoints to use for exponential curve fit
+line_fit = 'linear'
 top_boundary = 'seawater'
-line_fit = 'exponential'
 
 
 Comments = ''
@@ -48,7 +48,7 @@ Solute_db = 'Mg' # Solute label to send to the database
 
 # Model parameters
 z = 0  # Depth (meters below seafloor) at which to calculate flux
-cycles = 50  # Monte Carlo simulations
+cycles = 5000  # Monte Carlo simulations
 runtime_errors = 0
 
 # Connect to database
@@ -103,6 +103,8 @@ isotopedata = pd.DataFrame(np.concatenate((isotopedata_26,
                                            isotopedata_25.iloc[:, 1][:, None]),
                                           axis=1),
                            columns=['sample_depth', 'd26Mg', 'd25Mg'])
+
+isotopedata_26_1sd[1] = 0.025
 
 #concunique_mg = concunique_mg.reset_index(drop=True)
 #concunique_mg.index = concunique_mg.index - 1

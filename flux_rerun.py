@@ -19,6 +19,7 @@ Complete = 'yes'
 
 # Simulation parameters
 cycles = 5000
+line_fit = 'exponential'
 
 # Species parameters
 Ocean = 54  # Concentration in modern ocean (mM)
@@ -38,7 +39,7 @@ from {}
 ;""".format(metadata_table)
 metadata = pd.read_sql(sql, engine)
 
-for i in np.arange(np.size(metadata, axis=0))[265:]:
+for i in np.arange(np.size(metadata, axis=0))[23:]:
     cycles = 5000
     Comments = metadata.comments[i]
     Leg = metadata.leg[i]
@@ -59,11 +60,11 @@ for i in np.arange(np.size(metadata, axis=0))[265:]:
     concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = flux_functions.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
 
     # Fit pore water concentration curve
-    conc_fit = flux_functions.concentration_fit(concunique, dp)
-    conc_interp_fit_plot = flux_functions.conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), *conc_fit)
+    conc_fit = flux_functions.concentration_fit(concunique, dp, line_fit)
+    conc_interp_fit_plot = flux_functions.conc_curve(line_fit)(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), *conc_fit)
 
     # R-squared function
-    r_squared = flux_functions.rsq(flux_functions.conc_curve(concunique[:dp,0], *conc_fit), concunique[:dp,1])
+    r_squared = flux_functions.rsq(flux_functions.conc_curve(line_fit)(concunique[:dp,0], *conc_fit), concunique[:dp,1])
 
     # Fit porosity curve
     por = data_handling.averages(pordata[:, 0], pordata[:, 1])  # Average duplicates
@@ -87,7 +88,7 @@ for i in np.arange(np.size(metadata, axis=0))[265:]:
     pwburialflux = flux_functions.pw_burial(seddepths, sedtimes, por_fit, por)
 
     # Calculate solute flux
-    flux, burial_flux, gradient = flux_functions.flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed, advection, dp, Site)
+    flux, burial_flux, gradient = flux_functions.flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed, advection, dp, Site, line_fit)
 
     # Plot input data
     plt.ioff()
@@ -95,21 +96,21 @@ for i in np.arange(np.size(metadata, axis=0))[265:]:
     # figure_1.show()
 
     # Save Figure
-    savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\interface_flux_{}_{}.png".format(Leg, Site))
+    savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
     figure_1.clf()
     plt.close('all')
 
     # Monte Carlo Simulation
-    interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, z_score, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, z_score_log, runtime_errors = flux_functions.monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors)
+    interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors = flux_functions.monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit)
 
     # Plot Monte Carlo Distributions
-    mc_figure =flux_functions.monte_carlo_plot(interface_fluxes, median_flux, stdev_flux, skewness, z_score, interface_fluxes_log, median_flux_log, stdev_flux_log, skewness_log, z_score_log)
+    mc_figure =flux_functions.monte_carlo_plot(interface_fluxes, median_flux, stdev_flux, skewness, p_value, interface_fluxes_log, median_flux_log, stdev_flux_log, skewness_log, p_value_log)
     # mc_figure.show()
 
     # Save figure and fluxes from each run
-    savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\montecarlo_{}_{}.png".format(Leg, Site))
+    savefig(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\montecarlo_{}_{}_{}.png".format(Solute_db, Leg, Site))
     mc_figure.clf()
-    np.savetxt(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\monte carlo_{}_{}.csv".format(Leg, Site), interface_fluxes, delimiter=",")
+    np.savetxt(r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\monte carlo_{}_{}_{}.csv".format(Solute_db, Leg, Site), interface_fluxes, delimiter=",")
 
 
     # Date and time
@@ -124,13 +125,13 @@ for i in np.arange(np.size(metadata, axis=0))[265:]:
 
     # Send metadata to database
     flux_functions.flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
-                    burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,r_squared,
-                               age_depth_boundaries,sedrate,advection,Precision,Ds,
-                               TempD,bottom_temp,bottom_temp_est,cycles,
-                               por_error,mean_flux,median_flux,stdev_flux,
-                               skewness,z_score,mean_flux_log,median_flux_log,
-                               stdev_flux_log,stdev_flux_lower,stdev_flux_upper,
-                               skewness_log,z_score_log,runtime_errors,Date,Comments,Complete)
+                burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,r_squared,
+                           age_depth_boundaries,sedrate,advection,Precision,Ds,
+                           TempD,bottom_temp,bottom_temp_est,cycles,
+                           por_error,mean_flux,median_flux,stdev_flux,
+                           skewness,p_value,mean_flux_log,median_flux_log,
+                           stdev_flux_log,stdev_flux_lower,stdev_flux_upper,
+                           skewness_log,p_value_log,runtime_errors,Date,Comments,Complete)
     print('Cycles:', cycles)
     print('Errors:', runtime_errors)
 # eof

@@ -28,7 +28,7 @@ hole_info = "summary_all"
 # Load site data
 data = comp(database, metadata, site_info, hole_info)
 data = data[data['alpha'].notnull()]
-data['alpha'] = (data['alpha'].astype(float) - 1) * 1000
+epsilon = (data['alpha'].astype(float) - 1) * 1000
 
 # Geographic patterns
 size = abs(data['alpha'].astype(float)*100)
@@ -43,9 +43,11 @@ plt.colorbar(shrink=0.5)
 plt.show()
 
 # Direct comparison
-plt.scatter(data['alpha'].astype(float),
-            data['interface_flux'].astype(float), s= 100,
-            c='b')
+x = epsilon
+y = data['burial_flux'].astype(float)/data['interface_flux'].astype(float)
+size = data['toc_wood'].astype(float) * 100 + 100
+color = data['lithology'].astype(float)
+plt.scatter(x, y, s= size, c= color)
 plt.show()
 
 # Histogram
