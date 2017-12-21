@@ -5,7 +5,7 @@ Author: Rick Berg, University of Washington School of Oceanography, Seattle WA
 
 Module for calculating flux of solutes into/out of sediments.
 
-Includes:
+Functions:
 load_and_prep:       load data
 sedtemp:             geothermal gradient function
 d_stp:               free diffusion coefficient at STP
@@ -22,7 +22,7 @@ monte_carlo_fract:   monte carlo simulation for error of isotopic fractionation
 flux_plots:          plot flux_model inputs
 monte_carlo_plot:    plot monte carlo simulation distributions
 flux_to_sql:         send results to mysql database
-flux_only_to_sql:    send only fluxes to mysql database (deprecated)
+flux_only_to_sql:    send limited dataset to mysql database
 
 """
 
@@ -67,11 +67,13 @@ def averages(depths, values):
                                          resultvalues[np.argsort(resultkeys)]))
     return sorted
 
+
 def rmse(model_values, measured_values):
     """
     Root mean squared error of curve fit to measured values.
     """
     return np.sqrt(((model_values-measured_values)**2).mean())
+
 
 def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
                     portable, site_metadata):
@@ -96,17 +98,16 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     temp_gradient:        geothermal gradient
     bottom_conc:          ocean bottom water solute concentration (mM)
     bottom_temp:          ocean bottom water temperature (C)
-    bottom_temp_est:      ocean bottom water temperature parameter for estimation
+    bottom_temp_est:      ocean bottom water temp parameter for estimation
     pordata:              2D array of depth below seafloor (m) and porosity
                            measurements from load_and_prep.
-    seddepths:            sediment accumulation boundaries from load_and_prep function
-    sedtimes:             sediment accumulation boundaries from load_and_prep function
-    sedrate:              modern sediment accumulation rate (solid volume per year)
+    seddepths:            sedimentation bounds from load_and_prep function
+    sedtimes:             sedimentation bounds from load_and_prep function
+    sedrate:              modern sedimentation rate (solid volume per year)
     picks:                biostratigraphic age-depth data
-    age_depth_boundaries: boundaries between discrete sedimentation rate regimes
+    age_depth_boundaries: indices between discrete sedimentation rate regimes
     advection:            external advection rate
     """
-
     # Temperature gradient (degrees C/m)
     temp_gradient = site_metadata['temp_gradient'][0]
 
@@ -169,7 +170,6 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
         pordata = pd.concat((pordata, pordata_b), axis=0)
     pordata = pordata.as_matrix()
 
-
     # Sedimentation rate profile (m/y) (Calculated in age_depth.py)
     sql = """SELECT sedrate_ages, sedrate_depths
         FROM metadata_sed_rate
@@ -201,8 +201,6 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
         ;""".format(Leg, Site)
     age_depth_boundaries = pd.read_sql(sql, engine).iloc[0,0]
 
-    ###############################################################################
-
     # Concentration vector after averaging duplicates
     concunique = averages(concdata[:, 0], concdata[:, 1])
 
@@ -210,20 +208,24 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     if concunique[0,0] > 0.05:
         concunique = np.concatenate((np.array(([0],ct0)).T, concunique),
                                     axis=0)
-    return concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection
+    return (concunique, temp_gradient, bottom_conc, bottom_temp,
+            bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks,
+            age_depth_boundaries, advection)
+
 
 def sedtemp(z, bottom_temp, temp_gradient):
     """
     Geothermal gradient function (C/m)
 
-    z: depth below seafloor (m)
-    bottom_temp: bottom water temperature (C)
+    z:             depth below seafloor (m)
+    bottom_temp:   ocean bottom water temperature (C)
     temp_gradient: temperature gradient (C/m)
     """
     if z.all() == 0:
         return bottom_temp*np.ones(len(z))
     else:
         return bottom_temp + np.multiply(z, temp_gradient)
+
 
 def d_stp(Td, T, Ds):
     """
@@ -233,36 +235,41 @@ def d_stp(Td, T, Ds):
     Viscosity used as input into Stokes-Einstein equation
 
     Td:  reference temperature
-    T:  in situ temperature
-    Ds: Diffusion coefficient at reference temperature
+    T:   in situ temperature
+    Ds:  Diffusion coefficient at reference temperature
     """
     # Viscosity at reference temperature
-    muwd = 4.2844324477E-05 + 1/(1.5700386464E-01*(Td+6.4992620050E+01)**2+-9.1296496657E+01)
+    muwd = (4.2844324477E-05 +
+            1 /
+            (1.5700386464E-01 * (Td + 6.4992620050E+01)**2+-9.1296496657E+01))
     A = 1.5409136040E+00 + 1.9981117208E-02 * Td + -9.5203865864E-05 * Td**2
     B = 7.9739318223E+00 + -7.5614568881E-02 * Td + 4.7237011074E-04 * Td**2
     visd = muwd*(1 + A*0.035 + B*0.035**2)
 
     # Viscosity vector
-    muw = 4.2844324477E-05 + 1/(1.5700386464E-01*(T+6.4992620050E+01)**2+-9.1296496657E+01)
+    muw = (4.2844324477E-05 +
+           1 /
+           (1.5700386464E-01*(T + 6.4992620050E+01)**2+-9.1296496657E+01))
     C = 1.5409136040E+00 + 1.9981117208E-02 * T + -9.5203865864E-05 * T**2
     D = 7.9739318223E+00 + -7.5614568881E-02 * T + 4.7237011074E-04 * T**2
     vis = muw*(1 + C*0.035 + D*0.035**2)
-    T = T+273.15
-    Td = Td+273.15
-    return T/vis*visd*Ds/Td  # Stokes-Einstein equation
+    T = T + 273.15
+    Td = Td + 273.15
+    return T / vis * visd * Ds / Td  # Stokes-Einstein equation
 
 def rsq(modeled, measured):
     """
     Calculate the coefficient of determination (R-squared) value
     of a regression.
 
-    modeled: model predictions of dependent variable
+    modeled:  model predictions of dependent variable
     measured: measured values of dependent variable
     """
     yresid = measured - modeled
     sse = sum(yresid**2)
-    sstotal = (len(measured)-1)*np.var(measured)
-    return 1-sse/sstotal
+    sstotal = (len(measured) - 1) * np.var(measured)
+    return 1 - sse / sstotal
+
 
 def conc_curve(line_fit):
     """
@@ -270,7 +277,7 @@ def conc_curve(line_fit):
     This function has linear or exponential options for "line_fit".
     For Athy's Law, a = (v - sqrt(v**2 * 4Dk))/2D.
 
-    z: depth below seafloor
+    z:       depth below seafloor
     a, b, c: parameters to be fit
     """
     if line_fit == 'exponential':
@@ -281,13 +288,14 @@ def conc_curve(line_fit):
             return a * z + b
     return conc_curve_specific
 
+
 def concentration_fit(concunique, dp, line_fit):
     """
     Find best-fitting parameters to conc_curve functions.
 
     concunique: concentration and depth array from load_and_prep function
-    dp: number of datapoints from sediment surface to use for fit
-    line_fit: "linear" or "exponential", as specified in conc_curve
+    dp:         number of datapoints from sediment surface to use for fit
+    line_fit:   "linear" or "exponential", as specified in conc_curve
     """
     if line_fit == 'exponential':
         a0 = -0.1
@@ -328,31 +336,35 @@ def concentration_fit(concunique, dp, line_fit):
                                                     bounds=([-10,-1000],
                                                             [10,1000]),
                                                     method='trf')
+    # To be used if Boudreau method for conc gradient is used
     # conc_interp_depths = np.arange(0,3,intervalthickness)
     # conc_interp_fit = conc_curve(conc_interp_depths, conc_fit)
-    # To be used if Boudreau method for conc gradient is used
     return conc_fit
+
 
 def por_curve(z, por, a):
     """
     Porosity curve fit (Modified Athy's Law)
     Sets porosity at sed surface equal to greatest of first 3 measurements.
 
-    z: depth below seafloor (m)
+    z:   depth below seafloor (m)
     por: 2D array of depth below seafloor (m) and porosity measurements from
-         load_and_prep after putting through data_handling.avergaes function.
-    a: Athy's Law parameter to be fit
+         load_and_prep after putting through averages function.
+    a:   Athy's Law parameter to be fit
     """
-    portop = np.max(por[:3,1])  # Greatest of top 3 porosity measurements for upper porosity boundary
-    porbottom = np.mean(por[-3:,1])  # Takes lowest porosity measurement as the lower boundary
+    # Greatest of top 3 porosity measurements for upper porosity boundary
+    # Least of bottom 3 porosity measurements as the lower boundary
+    portop = np.max(por[:3,1])
+    porbottom = np.mean(por[-3:,1])
     return (portop-porbottom) * np.exp(np.multiply(a, z)) + porbottom
+
 
 def porosity_fit(por):
     """
     Find best-fitting parameters to por_curve function.
 
     por: 2D array of depth below seafloor (m) and porosity measurements from
-         load_and_prep after putting through data_handling.avergaes function.
+         load_and_prep after putting through averages function.
     """
     porvalues = por[:, 1]
     pordepth = por[:, 0]
@@ -360,19 +372,22 @@ def porosity_fit(por):
                                          pordepth, porvalues, p0=-0.01)
     return por_fit
 
+
 def solid_curve(z, por, a):
     """
-    Solids curve function (Compliment of porosity curve fit function)
+    Solids curve function (Compliment of por_curve function)
 
-    z: depth below seafloor (m)
+    z:   depth below seafloor (m)
     por: 2D array of depth below seafloor (m) and porosity measurements from
-         load_and_prep after putting through data_handling.avergaes function.
-    a: Athy's Law parameter to be fit (same as por_curve Athy's parameter)
-
+         load_and_prep after putting through averages function.
+    a:   Athy's Law parameter to be fit (same as por_curve Athy's parameter)
     """
-    portop = np.max(por[:3,1])  # Greatest of top 3 porosity measurements for upper porosity boundary
-    porbottom = np.mean(por[-3:,1])  # Takes lowest porosity measurement as the lower boundary
+    # Greatest of top 3 porosity measurements for upper porosity boundary
+    # Least of bottom 3 porosity measurements as the lower boundary
+    portop = np.max(por[:3,1])
+    porbottom = np.mean(por[-3:,1])
     return 1-((portop-porbottom) * np.exp(np.multiply(a, z)) + porbottom)
+
 
 def pw_burial(seddepths, sedtimes, por_fit, por):
     """
@@ -381,44 +396,52 @@ def pw_burial(seddepths, sedtimes, por_fit, por):
     Assumes constant sediment volume accumulation rates between
     age-depth measurements.
 
-    seddepths: sediment accumulation boundaries from load_and_prep function
-    sedtimes: sediment accumulation boundaries from load_and_prep function
-    por_fit: Athy's Law parameter from porosity_fit function
-    por: 2D array of depth below seafloor (m) and porosity measurements from
-         load_and_prep after putting through data_handling.avergaes function.
-
+    seddepths: sediment accumulation bounds from load_and_prep function
+    sedtimes:  sediment accumulation bounds from load_and_prep function
+    por_fit:   Athy's Law parameter from porosity_fit function
+    por:       2D array of depth below seafloor (m) and porosity measurements
+               from load_and_prep after putting through averages function.
     """
-    sectionmass = (integrate.quad(solid_curve, seddepths[0], seddepths[1], args=(por, por_fit)))[0]
+    sectionmass = (integrate.quad(solid_curve,
+                                  seddepths[0],
+                                  seddepths[1],
+                                  args=(por, por_fit)))[0]
     sedmassrate = (sectionmass/np.diff(sedtimes)[0])
 
     # Pore water burial flux calculation
-    deeppor = np.mean(por[-3:,1])  # Takes lowest porosity measurement as the lower boundary
+    # Least of bottom 3 porosity measurements as the lower boundary
+    deeppor = np.mean(por[-3:,1])
     deepsolid = 1 - deeppor
     pwburialflux = deeppor*sedmassrate/deepsolid
     return pwburialflux
 
-# Flux model
+
 def flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed,
                 advection, dp, Site, line_fit):
     """
     Solute flux calculation using 1D advection-diffusion model
 
-    conc_fit: parameters for conc_curve
-    concunique: 2D numpy array of depth and concentration from load_and_prep
-    z: depth below seafloor at which flux is determined (m)
+    conc_fit:     parameters for conc_curve
+    concunique:   2D numpy array of depth and concentration from load_and_prep
+    z:            depth below seafloor at which flux is determined (m)
     pwburialflux: modern pore water burial rate
-    porosity: porosity at z
-    Dsed: diffusion coefficient at z
-    advection: advection rate at z
-    dp: concnetration datapoints below seafloor used for line fit
-    Site: Drilling site number
-    line_fit: "linear" or "exponential", as specified in conc_curve
-
+    porosity:     porosity at z
+    Dsed:         diffusion coefficient at z
+    advection:    advection rate at z
+    dp:           concentration datapoints below seafloor used for line fit
+    Site:         drilling site number
+    line_fit:     "linear" or "exponential", as specified in conc_curve
     """
     if line_fit == 'exponential':
-        # gradient = (-3*conc_interp_fit[0] + 4*conc_interp_fit[1] - conc_interp_fit[2])/(2*intervalthickness)  # Approximation according to Boudreau 1997 Diagenetic Models and Their Implementation. Matches well with derivative method
-        gradient = conc_fit[1] * conc_fit[0] * np.exp(np.multiply(conc_fit[0], z))  # Derivative of conc_curve @ z
+        # Derivative of conc_curve @ z
+        gradient = (
+            conc_fit[1] * conc_fit[0] * np.exp(np.multiply(conc_fit[0], z)))
+        # Approximation according to Boudreau 1997
+        # gradient = (-3*conc_interp_fit[0] +
+        #             4*conc_interp_fit[1] -
+        #             conc_interp_fit[2]) / (2*intervalthickness)
     elif line_fit == 'linear':
+        # Derivative of conc_curve @ z
         gradient = conc_fit[0]
     burial_flux = pwburialflux * conc_curve(line_fit)(z, *conc_fit)
     flux = (porosity * Dsed * -gradient +
@@ -427,32 +450,37 @@ def flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed,
     print('Site:', Site, 'Flux (mol/m^2 y^-1):', flux)
     return flux, burial_flux, gradient
 
-def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit):
+
+def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por,
+                por_fit, seddepths, sedtimes, TempD, bottom_temp, z,
+                advection, Leg, Site, Solute_db, Ds, por_error, conc_fit,
+                runtime_errors, line_fit):
     """
     Monte Carlo simulation of flux_model output to find total error in fluxes
 
-    cycles: Number of simulations to run
-    Precision: relative standard deviation of concentration measurements
-    concunique: 2D numpy array of depth and concentration from load_and_prep
+    cycles:          number of simulations to run
+    Precision:       relative standard deviation of concentration measurements
+    concunique:      2D array of depth and concentration from load_and_prep
     bottom_temp_est: bottom water temperature
-    dp: concnetration datapoints below seafloor used for line fit
-    por: 2D array of depth below seafloor (m) and porosity measurements from
-         load_and_prep after putting through data_handling.avergaes function.
-    por_fit: Athy's Law parameter from porosity_fit function
-    seddepths: sediment accumulation boundaries from load_and_prep function
-    sedtimes: sediment accumulation boundaries from load_and_prep function
-    TempD: reference temperature of diffusion coefficient
-    bottom_temp: bottom water temperature
-    z: depth at which flux is calculated
-    advection: external advection rate
-    Leg: Drilling leg/expedition number
-    Site: Drilling site number
-    Solute_db: solute name for inserting into database
-    Ds: Free diffusion coefficient at TempD
-    por_error: porosity measurement error
-    conc_fit: conc_curve parameter values
-    runtime_errors: number of runtime errors=0
-    line_fit: "linear" or "exponential", as specified in conc_curve
+    dp:              concentration datapoints below seafloor used for line fit
+    por:             2D array of depth below seafloor (m) and porosity
+                     measurements from load_and_prep after putting through
+                     averages function.
+    por_fit:         Athy's Law parameter from porosity_fit function
+    seddepths:       sediment accumulation bounds from load_and_prep function
+    sedtimes:        sediment accumulation bounds from load_and_prep function
+    TempD:           reference temperature of diffusion coefficient
+    bottom_temp:     ocean bottom water temperature (C)
+    z:               depth at which flux is calculated
+    advection:       external advection rate
+    Leg:             drilling leg/expedition number
+    Site:            drilling site number
+    Solute_db:       solute name for inserting into database
+    Ds:              free diffusion coefficient at TempD
+    por_error:       porosity measurement error
+    conc_fit:        conc_curve parameter values
+    runtime_errors:  number of runtime errors=0
+    line_fit:        "linear" or "exponential", as specified in conc_curve
     """
 
     # Porosity offsets - using full gaussian probability
@@ -480,7 +508,7 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
     conc_offsets = np.random.normal(scale=relativeerror,
                                     size=(cycles, len(concunique[:dp,1])))
 
-    # Bottom water temperature errors calculated in bottom_temp_error_estimate.py
+    # Bottom water temperature errors calc'd in bottom_temp_error_estimate.py
     if bottom_temp_est == 'deep':
         temp_error = 0.5
         temp_offsets = np.random.normal(scale=temp_error, size=cycles)
@@ -492,7 +520,7 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
         temp_offsets = np.zeros(cycles)
 
     '''
-    # Concentration offsets - truncate error at 2-sigma of gaussian distribution
+    # Concentration offsets - truncate at 2-sigma of gaussian distribution
     i=0
     offsets = []
     while i < cycles:
@@ -506,15 +534,13 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
         offsets.append(offset)
         i = len(offsets)
     '''
-    ###########################################################################
-    # Calculate fluxes for random profiles
 
     # Get randomized concentration matrix (within realistic ranges)
     conc_rand = np.add(concunique[:dp,1],
                        np.multiply(conc_offsets, concunique[:dp,1]))
     conc_rand[conc_rand < 0] = 0
 
-    # Calculate flux
+    # Calculate fluxes for random profiles
     conc_fits = np.zeros((cycles, len(conc_fit))) * np.nan
     por_fits = np.zeros(cycles) * np.nan
     pwburialfluxes = np.zeros(cycles) * np.nan
@@ -537,21 +563,23 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
         pwburialflux = pw_burial(seddepths, sedtimes, por_fit, por)
         pwburialfluxes[n] = pwburialflux
 
-    # Filter out profiles erroneously fit
-    # if line_fit == 'exponential':
-    #    conc_fits[~np.isnan(conc_fits).any(axis=1)][abs(conc_fit[0] - conc_fits[~np.isnan(conc_fits).any(axis=1)][:,0]) > abs(conc_fits[~np.isnan(conc_fits).any(axis=1)][:,0] + conc_fit[0])/2] = np.array([np.nan, np.nan, np.nan])
-
     # Dsed vector
     tortuosity_rand = 1-np.log(portop_rand**2)
     bottom_temp_rand = bottom_temp+temp_offsets
     bottom_temp_rand[bottom_temp_rand < -2] = -2
     Dsed_rand = d_stp(TempD, bottom_temp_rand, Ds)/tortuosity_rand
 
-    # For plotting all the monte carlo runs
-    # conc_interp_fit_plot = conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), conc_fits)
-    # por_interp_fit_plot = conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), conc_fits)
+    """
+    Plot all the monte carlo runs
+    conc_interp_fit_plot = conc_curve(np.linspace(concunique[0,0],
+                                                  concunique[dp-1,0],
+                                                  num=50), conc_fits)
+    por_interp_fit_plot = conc_curve(np.linspace(concunique[0,0],
+                                                 concunique[dp-1,0],
+                                                 num=50), conc_fits)
+    """
 
-    # Calculate fluxes
+    # Calculate randomized fluxes
     if line_fit == 'exponential':
         gradient = (conc_fits[:,1] * conc_fits[:,0]
                     * np.exp(np.multiply(conc_fits[:,0], z)))
@@ -569,69 +597,82 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
                                                    conc_fits[:,0],
                                                    conc_fits[:,1]))
 
-    ###########################################################################
     # Distribution statistics
-
-    # Stats on normal distribution
-    mean_flux = np.nanmean(interface_fluxes)
-    median_flux = np.nanmedian(interface_fluxes)
-    stdev_flux = np.nanstd(interface_fluxes)
-    skewness = stats.skew(abs(interface_fluxes[~np.isnan(interface_fluxes)]))
-    test_stat, p_value = stats.kstest((interface_fluxes[~np.isnan(interface_fluxes)]-mean_flux)/stdev_flux, 'norm')
+    fluxes_real = interface_fluxes[~np.isnan(interface_fluxes)]
+    mean_flux = np.mean(fluxes_real)
+    median_flux = np.median(fluxes_real)
+    stdev_flux = np.std(fluxes_real)
+    skewness = stats.skew(abs(fluxes_real))
+    fluxes_norm = (fluxes_real - mean_flux) / stdev_flux
+    test_stat, p_value = stats.kstest(fluxes_norm, 'norm')
 
     # Stats on lognormal distribution
-    interface_fluxes_log = -np.log(abs(interface_fluxes))
-    mean_flux_log = np.nanmean(interface_fluxes_log)
-    median_flux_log = np.nanmedian(interface_fluxes_log)
-    stdev_flux_log = np.nanstd(interface_fluxes_log)
-    skewness_log = stats.skew(interface_fluxes_log[~np.isnan(interface_fluxes_log)])
-    test_stat_log, p_value_log = stats.kstest((interface_fluxes_log[~np.isnan(interface_fluxes_log)]-mean_flux_log)/stdev_flux_log, 'norm')
-    stdev_flux_lower = np.exp(-(median_flux_log-stdev_flux_log))
-    stdev_flux_upper = np.exp(-(median_flux_log+stdev_flux_log))
-    return interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors, conc_fits
+    fluxes_log_real = -np.log(abs(fluxes_real))
+    mean_flux_log = np.mean(fluxes_log_real)
+    median_flux_log = np.median(fluxes_log_real)
+    stdev_flux_log = np.std(fluxes_log_real)
+    skewness_log = stats.skew(fluxes_log_real)
+    fluxes_log_norm = (fluxes_log_real - mean_flux_log)/stdev_flux_log
+    test_stat_log, p_value_log = stats.kstest(fluxes_log_norm, 'norm')
+    stdev_flux_lower = np.exp(-(median_flux_log - stdev_flux_log))
+    stdev_flux_upper = np.exp(-(median_flux_log + stdev_flux_log))
+    return (fluxes_real, fluxes_log_real, cycles, por_error,
+            mean_flux, median_flux, stdev_flux, skewness, p_value,
+            mean_flux_log, median_flux_log, stdev_flux_log,
+            stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log,
+            runtime_errors, conc_fits)
 
-def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean, line_fit):
+
+def monte_carlo_fract(cycles, Precision, Precision_iso, concunique,
+                      bottom_temp_est, dp, por, por_fit, seddepths, sedtimes,
+                      TempD, bottom_temp, z, advection, Leg, Site, Solute_db,
+                      Ds, por_error, conc_fit, runtime_errors, isotopedata,
+                      mg26_24_ocean, line_fit):
     """
     Monte Carlo simulation of flux_model (applied to Mg fractionation) outputs
     to find total error in Mg fractionations.
 
-    cycles: Number of simulations to run
-    Precision: relative standard deviation of concentration measurements
-    Precision_iso: standard deviation of isotope measurements
-    concunique: 2D numpy array of depth and concentration from load_and_prep
+    cycles:          number of simulations to run
+    Precision:       relative standard deviation of concentration measurements
+    Precision_iso:   standard deviation of isotope measurements
+    concunique:      2D array of depth and concentration from load_and_prep
     bottom_temp_est: bottom water temperature
-    dp: concnetration datapoints below seafloor used for line fit
-    por: 2D array of depth below seafloor (m) and porosity measurements from
-         load_and_prep after putting through data_handling.avergaes function.
-    por_fit: Athy's Law parameter from porosity_fit function
-    seddepths: sediment accumulation boundaries from load_and_prep function
-    sedtimes: sediment accumulation boundaries from load_and_prep function
-    TempD: reference temperature of diffusion coefficient
-    bottom_temp: bottom water temperature
-    z: depth at which flux is calculated
-    advection: external advection rate
-    Leg: Drilling leg/expedition number
-    Site: Drilling site number
-    Solute_db: solute name for inserting into database
-    Ds: Free diffusion coefficient at TempD
-    por_error: porosity measurement error
-    conc_fit: conc_curve parameter values
-    runtime_errors: number of runtime errors=0
-    isotopedata: 2D numpy array of depth and isotopic delta values
-    mg26_24_ocean: delta value of the ocean
-    line_fit: "linear" or "exponential", as specified in conc_curve
+    dp:              concentration datapoints below seafloor used for line fit
+    por:             2D array of depth below seafloor (m) and porosity
+                     measurements from load_and_prep after putting through
+                     averages function.
+    por_fit:         Athy's Law parameter from porosity_fit function
+    seddepths:       sediment accumulation bounds from load_and_prep function
+    sedtimes:        sediment accumulation bounds from load_and_prep function
+    TempD:           reference temperature of diffusion coefficient
+    bottom_temp:     ocean bottom water temperature (C)
+    z:               depth at which flux is calculated
+    advection:       external advection rate
+    Leg:             drilling leg/expedition number
+    Site:            drilling site number
+    Solute_db:       solute name for inserting into database
+    Ds:              free diffusion coefficient at TempD
+    por_error:       porosity measurement error
+    conc_fit:        conc_curve parameter values
+    runtime_errors:  number of runtime errors=0
+    isotopedata:     2D numpy array of depth and isotopic delta values
+    mg26_24_ocean:   delta value of the ocean
+    line_fit:        "linear" or "exponential", as specified in conc_curve
     """
     # Porosity offsets - using full gaussian probability
-    por_offsets = np.random.normal(scale=por_error, size=(cycles, len(por[:,1])))
+    por_offsets = np.random.normal(scale=por_error,
+                                   size=(cycles, len(por[:,1])))
 
-    # Get randomized porosity matrix (within realistic ranges between 30% and 90%)
+    # Randomized porosity matrix (within realistic ranges between 30% and 90%)
     por_rand = np.add(por_curve(por[:,0], por, *por_fit), por_offsets)
     por_rand[por_rand > 0.90] = 0.90
     por_rand[por_rand < 0.30] = 0.30
 
     portop = np.max(por[:3,1])
     portop_rand = np.add(portop, por_offsets[:,0])
-    portop_rand = portop_rand[portop_rand > por_curve(por[-1,0], por, *por_fit)]
+    portop_rand = portop_rand[portop_rand > por_curve(por[-1,0],
+                                                      por,
+                                                      *por_fit)]
     portop_rand = portop_rand[portop_rand < 0.90]
 
     cycles = len(portop_rand)
@@ -641,27 +682,27 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
     # relativeerror = Precision
     # conc_offsets = np.random.normal(scale=relativeerror,
     #                                 size=(cycles, len(isotopedata[:, 3])))
-
-    # Isotopic ratio (in delta notation) offsets - full gaussian probability
-    delta_offsets = Precision_iso[:,None]*np.random.normal(scale=1,
-                                            size=(len(Precision_iso), cycles))
-
     # Get randomized concentration matrix (within realistic ranges)
     # conc_rand = np.add(isotopedata[:, 3], np.multiply(conc_offsets,
     #                                                    isotopedata[:, 3]))
     # conc_rand[conc_rand < 0] = 0
 
-    # Calculate Mg isotope concentrations
+    # Isotopic ratio (in delta notation) offsets - full gaussian probability
+    delta_offsets = Precision_iso[:,None]*np.random.normal(scale=1,
+                                            size=(len(Precision_iso), cycles))
+
+    # Calculate randomized Mg isotope concentration profiles
+    # Decimal numbers are isotopic ratios of standards.
     # Source for 26/24std: Isotope Geochemistry, William White, pp.365
-    mg26_24 = (((isotopedata[:, 1][:,None]+delta_offsets)/1000)+1)*0.13979 # np.ones(len(isotopedata[:, 1]))*mg26_24_ocean #   # Decimal numbers are isotopic ratios of standards
-    mg25_24 = (((isotopedata[:, 2][:,None]+delta_offsets)/1000)+1)*0.126635  # Estimated for now (calc'd from 26/24 value divided by 25/24 measured values)
+    # 25Mg/24Mg calc'd from from 26/24 value divided by 25/24 measured values.
+    mg26_24 = (((isotopedata[:, 1][:,None]+delta_offsets)/1000)+1)*0.13979
+    mg25_24 = (((isotopedata[:, 2][:,None]+delta_offsets)/1000)+1)*0.126635
     concunique_mg24 = isotopedata[:, 3][:,None]/(mg26_24+mg25_24+1)
     # concunique_mg24 = conc_rand.T/(mg26_24+mg25_24+1)
     concunique_mg26 = concunique_mg24*mg26_24
-
     isotope_concs = [concunique_mg24, concunique_mg26]
 
-    # Bottom water temperature offsets errors calculated in bottom_temp_error_estimate.py
+    # Bottom water temp errors calculated in bottom_temp_error_estimate.py
     if bottom_temp_est == 'deep':
         temp_error = 0.5
         temp_offsets = np.random.normal(scale=temp_error, size=cycles)
@@ -672,10 +713,7 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
         temp_error = 0
         temp_offsets = np.zeros(cycles)
 
-    ###############################################################################
     # Calculate fluxes for random profiles
-
-    # Calculate flux
     conc_fits = np.zeros((cycles, len(conc_fit), 2)) * np.nan
     por_fits = np.zeros(cycles) * np.nan
     pwburialfluxes = np.zeros(cycles) *np.nan
@@ -691,69 +729,102 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
             except RuntimeError:
                 runtime_errors += 1
                 continue
-
         # Fit exponential curve to each randomized porosity profile
         por_rand_n[:,1] =  por_rand[n,:]
         por_fit = porosity_fit(por_rand_n)
         por_fits[n] = por_fit
-
         # Pore water burial mass flux
         pwburialflux = pw_burial(seddepths, sedtimes, por_fit, por)
         pwburialfluxes[n] = pwburialflux
 
     # Filter out profiles where 26Mg or 24Mg were erroneously fit
     if line_fit == 'exponential':
-        conc_fits[abs(conc_fits[:,0,0] - conc_fits[:,0,1]) > 0.05 * abs(conc_fits[:,0,0] + conc_fits[:,0,1])/2] = np.nan
+        conc_fits[abs(conc_fits[:,0,0] - conc_fits[:,0,1]) >
+                  0.05 * abs(conc_fits[:,0,0] + conc_fits[:,0,1])/2] = np.nan
 
-    # Dsed vector
+    # Effective diffusion coeffiecient vector
     tortuosity_rand = 1-np.log(portop_rand**2)
     bottom_temp_rand = bottom_temp+temp_offsets
     bottom_temp_rand[bottom_temp_rand < -2] = -2
-
     Dsed_rand = d_stp(TempD, bottom_temp_rand, Ds)/tortuosity_rand
 
-    # Plot all the monte carlo runs
-    # conc_interp_fit_plot = conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), conc_fits)
-    # por_interp_fit_plot = conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), conc_fits)
+    """
+    Plot all the monte carlo runs
+    conc_interp_fit_plot = conc_curve(np.linspace(concunique[0,0],
+                                                  concunique[dp-1,0],
+                                                  num=50), conc_fits)
+    por_interp_fit_plot = conc_curve(np.linspace(concunique[0,0],
+                                                 concunique[dp-1,0],
+                                                 num=50), conc_fits)
+    """
 
     # Calculate fluxes
     fluxes = []
     for i in np.arange(2):
         if line_fit == 'exponential':
-            gradient = conc_fits[:,1,i] * conc_fits[:,0,i] * np.exp(np.multiply(conc_fits[:,0,i], z))
-            interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(line_fit)(z, conc_fits[:,0,i], conc_fits[:,1,i], conc_fits[:,2,i])
+            gradient = (conc_fits[:,1,i] *
+                        conc_fits[:,0,i] *
+                        np.exp(np.multiply(conc_fits[:,0,i], z)))
+            interface_fluxes = (portop_rand * Dsed_rand * -gradient +
+                               (portop_rand * advection + pwburialfluxes) *
+                               conc_curve(line_fit)(z,
+                                                    conc_fits[:,0,i],
+                                                    conc_fits[:,1,i],
+                                                    conc_fits[:,2,i]))
         elif line_fit == 'linear':
             gradient = conc_fits[:,0,i]
-            interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(line_fit)(z, conc_fits[:,0,i], conc_fits[:,1,i])
+            interface_fluxes = (portop_rand * Dsed_rand * -gradient +
+                               (portop_rand * advection + pwburialfluxes) *
+                               conc_curve(line_fit)(z,
+                                                    conc_fits[:,0,i],
+                                                    conc_fits[:,1,i]))
         fluxes.append(interface_fluxes)
     mg26_24_flux = fluxes[1]/fluxes[0]
     alpha = mg26_24_flux/mg26_24_ocean
     epsilon = (alpha - 1) * 1000
 
-    ###########################################################################
     # Distribution statistics
-
-    # Stats on normal distribution
     alpha_mean = np.nanmean(alpha)
     alpha_median = np.nanmedian(alpha)
     alpha_stdev = np.nanstd(alpha)
-    test_stat, p_value = stats.kstest((alpha[~np.isnan(alpha)]-alpha_mean)/alpha_stdev, 'norm')
+    alpha_norm = (alpha[~np.isnan(alpha)]-alpha_mean)/alpha_stdev
+    test_stat, p_value = stats.kstest(alpha_norm, 'norm')
+    return (alpha, epsilon, cycles, por_error, alpha_mean, alpha_median,
+            alpha_stdev, test_stat, p_value, runtime_errors, conc_fits, fluxes)
 
-    return alpha, epsilon, cycles, por_error, alpha_mean, alpha_median, alpha_stdev, test_stat, p_value, runtime_errors, conc_fits, fluxes
 
-def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_temp, picks, sedtimes, seddepths, Leg, Site, Solute_db, flux, dp, temp_gradient):
+def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit,
+               bottom_temp, picks, sedtimes, seddepths, Leg, Site, Solute_db,
+               flux, dp, temp_gradient):
     """
-    Plot the input data for the flux_model.
+    Plot the input data and line fits used in the flux_model.
 
-
+    concunique:        2D array of depth and concentration from load_and_prep
+    conc_interp_fit_plot: 2D array of concentration model
+    por:               2D array of depth below seafloor (m) and porosity
+                       measurements from load_and_prep after putting through
+                       averages function.
+    por_all:           2D array of all porosity data
+    porfit:            por_curve parameters
+    bottom_temp:       ocean bottom water temperature (C)
+    picks:             biostratigraphic age-depth data
+    seddepths:         sediment accumulation bounds from load_and_prep function
+    sedtimes:          sediment accumulation bounds from load_and_prep function
+    Leg:               drilling leg/expedition number
+    Site:              drilling site number
+    Solute_db:         solute name for inserting into database
+    flux:              solute flux calculated at this site (mol m^-2 y^-1)
+    dp:                datapoints used for solute concentration curve fit
+    temp_gradient:     geothermal gradient (C/m)
 
     """
 
     # Set up axes and subplot grid
     mpl.rcParams['mathtext.fontset'] = 'stix'
-    #mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'
     mpl.rc('font',family='serif')
-    figure_1, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(10, 6), facecolor='none')
+    figure_1, (ax1, ax2, ax3) = plt.subplots(1, 3,
+                                             figsize=(10, 6),
+                                             facecolor='none')
     grid = gridspec.GridSpec(3, 6, wspace=0.7)
     ax1 = plt.subplot(grid[0:3, :2])
     ax1.grid()
@@ -761,39 +832,58 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_te
     ax2.grid()
     ax3 = plt.subplot(grid[0:3, 4:6], sharey=ax1)
     ax3.grid()
-    # ax4 = plt.subplot(grid[0:3, 6:8], sharey=ax1)
-    # ax4.grid()
 
     # Figure title
-    figure_1.suptitle(r"$Expedition\ {},\ Site\ {}\ \ \ \ \ \ \ \ \ \ \ \ \ \ {}\ flux={}\ mol/m^2y$".format(Leg, Site, Solute_db, round(flux,4)), fontsize=20)
+    figure_1.suptitle(
+        r"$Expedition\ {},\ Site\ {}\ \ \ \ \ \ \ \ \ \ {}\ flux={}\ mol/m^2y$"
+        .format(Leg, Site, Solute_db, round(flux,4)), fontsize=20)
 
     # Plot input data
-    ax1.plot(concunique[:,1], concunique[:,0], 'go')
+    ax1.plot(concunique[:,1],
+             concunique[:,0],
+             'go')
     ax1.plot(concunique[0:dp,1],
              concunique[0:dp,0],
              'bo', label="Used for curve fit")
     ax1.plot(conc_interp_fit_plot,
-             np.linspace(concunique[0,0],
-                         concunique[dp-1,0],num=50),
-                         'k-', label="Curve fit", linewidth=2)
-    ax2.plot(por_all[:, 1], por_all[:, 0], 'mo', label='Measured')
-    ax2.plot(por_curve(por[:,0],
-                       por, *porfit),
-                       por[:,0],
-                       'k-', label='Curve fit', linewidth=3)
-    ax3.plot(picks[:,1]/1000000, picks[:,0], 'ro', label='Biostrat picks')
-    ax3.plot(sedtimes/1000000, seddepths, 'k-', label='Curve fit', linewidth=2)
-    # ax4.plot(bottom_temp,0, 'ko', markersize=15)
-    # ax4.plot(sedtemp(np.arange(concunique[-1,0]), bottom_temp, temp_gradient), np.arange(concunique[-1,0]), 'k-', linewidth=3)
+             np.linspace(concunique[0,0], concunique[dp-1,0], num=50),
+            'k-', label="Curve fit", linewidth=2)
+    ax2.plot(por_all[:, 1],
+             por_all[:, 0],
+             'mo',
+             label='Measured')
+    ax2.plot(por_curve(por[:,0], por, *porfit),
+             por[:,0],
+            'k-',
+            label='Curve fit',
+            linewidth=3)
+    ax3.plot(picks[:,1]/1000000,
+             picks[:,0],
+             'ro',
+             label='Biostrat picks')
+    ax3.plot(sedtimes/1000000,
+             seddepths,
+             'k-',
+             label='Curve fit',
+             linewidth=2)
 
     # Inset in concentration plot
     y2 = np.ceil(concunique[dp-1,0])
     x2 = max(concunique[:dp,1])+0.01
     x1 = min(concunique[:dp,1])-0.01
     axins1 = inset_axes(ax1, width="50%", height="30%", loc=5)
-    axins1.plot(concunique[:,1], concunique[:,0], 'go')
-    axins1.plot(concunique[0:dp,1], concunique[0:dp,0], 'bo', label="Used for curve fit")
-    axins1.plot(conc_interp_fit_plot, np.linspace(concunique[0,0], concunique[dp-1,0], num=50), 'k-')
+    axins1.plot(concunique[:,1],
+                concunique[:,0],
+                'go')
+    axins1.plot(concunique[0:dp,1],
+                concunique[0:dp,0],
+                'bo',
+                label="Used for curve fit")
+    axins1.plot(conc_interp_fit_plot,
+                np.linspace(concunique[0,0],
+                            concunique[dp-1,0],
+                            num=50),
+                            'k-')
     axins1.set_xlim(x1-0.01, x2+0.01)
     axins1.set_ylim(0, y2)
     mark_inset(ax1, axins1, loc1=1, loc2=2, fc="none", ec="0.5")
@@ -816,9 +906,21 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_te
     axins1.invert_yaxis()
     return figure_1
 
-def monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev, alpha_mean, p_value):
+
+def monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev,
+                              alpha_mean, p_value):
+    """
+    Plot the distribution of values from the Monte Carlo simulation of
+    fractionation factors.
+
+    alpha:        fractionation factor from ocean to sediment column
+    alpha_median: median of fractionation factors from monte carlo simulation
+    alpha_stdev:  standard deviation of fractionation factors from m.c. sim.
+    alpha_mean:   average of fractionation factors from monte carlo simulation
+    p_value:      Kolmogorov-Smirnov test p-value of Monte Carlo output
+    """
+
     mpl.rcParams['mathtext.fontset'] = 'stix'
-    #mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'
     mpl.rc('font',family='serif')
     mc_figure, (ax5) = plt.subplots(1, 1, figsize=(6, 5),gridspec_kw={
                                                         'wspace':0.2,
@@ -828,8 +930,10 @@ def monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev, alpha_mean, p_value
                                                         'right':0.90})
 
     # Plot histogram of results
-    n_1, bins_1, patches_1 = ax5.hist((alpha[~np.isnan(alpha)]-1)*1000, normed=1,
-                                      bins=50, facecolor='blue')
+    n_1, bins_1, patches_1 = ax5.hist((alpha[~np.isnan(alpha)]-1)*1000,
+                                      normed=1,
+                                      bins=50,
+                                      facecolor='blue')
 
     # Best fit normal distribution line to results
     bf_line_1 = mlab.normpdf(bins_1, (alpha_mean-1)*1000, alpha_stdev*1000)
@@ -841,22 +945,28 @@ def monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev, alpha_mean, p_value
     ax5.text((left_raw+(right_raw-left_raw)/20),
              (top_raw-(top_raw-bottom_raw)/10),
              """$K-S\ p-value\ =\ {}$""".format(np.round(p_value, 2)))
-
     return mc_figure
 
 
-def monte_carlo_plot(interface_fluxes, mean_flux, stdev_flux, skewness, p_value, interface_fluxes_log, median_flux_log, stdev_flux_log, skewness_log, p_value_log):
+def monte_carlo_plot(fluxes_real, mean_flux, stdev_flux, skewness,
+                       p_value, fluxes_log_real, median_flux_log,
+                       stdev_flux_log, skewness_log, p_value_log):
+
     mpl.rcParams['mathtext.fontset'] = 'stix'
-    #mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'
     mpl.rc('font',family='serif')
-    mc_figure, (ax5, ax6) = plt.subplots(1, 2, figsize=(12, 5),gridspec_kw={'wspace':0.2,
-                                                        'top':0.92,
-                                                        'bottom':0.13,
-                                                        'left':0.1,
-                                                        'right':0.90})
+    mc_figure, (ax5, ax6) = plt.subplots(1, 2,
+                                         figsize=(12, 5),
+                                         gridspec_kw={'wspace':0.2,
+                                                      'top':0.92,
+                                                      'bottom':0.13,
+                                                      'left':0.1,
+                                                      'right':0.90})
 
     # Plot histogram of results
-    n_1, bins_1, patches_1 = ax5.hist(interface_fluxes[~np.isnan(interface_fluxes)]*1000, normed=1, bins=30, facecolor='orange')
+    n_1, bins_1, patches_1 = ax5.hist(fluxes_real * 1000,
+                                      normed=1,
+                                      bins=30,
+                                      facecolor='orange')
 
     # Best fit normal distribution line to results
     bf_line_1 = mlab.normpdf(bins_1, mean_flux*1000, stdev_flux*1000)
@@ -865,11 +975,18 @@ def monte_carlo_plot(interface_fluxes, mean_flux, stdev_flux, skewness, p_value,
 
     [left_raw, right_raw] = ax5.get_xlim()
     [bottom_raw, top_raw] = ax5.get_ylim()
-    ax5.text((left_raw+(right_raw-left_raw)/20), (top_raw-(top_raw-bottom_raw)/20), '$sk\ =\ {}$'.format(np.round(skewness, 2)))
-    ax5.text((left_raw+(right_raw-left_raw)/20), (top_raw-(top_raw-bottom_raw)/10), "$K-S\ p-value\ =\ {}$".format(np.round(p_value, 2)))
+    ax5.text((left_raw+(right_raw-left_raw)/20),
+             (top_raw-(top_raw-bottom_raw)/20),
+             '$sk\ =\ {}$'.format(np.round(skewness, 2)))
+    ax5.text((left_raw+(right_raw-left_raw)/20),
+             (top_raw-(top_raw-bottom_raw)/10),
+             "$K-S\ p-value\ =\ {}$".format(np.round(p_value, 2)))
 
     # Plot histogram of ln(results)
-    n_2, bins_2, patches_2 = plt.hist(interface_fluxes_log[~np.isnan(interface_fluxes_log)], normed=1, bins=30, facecolor='g')
+    n_2, bins_2, patches_2 = plt.hist(fluxes_log_real,
+                                      normed=1,
+                                      bins=30,
+                                      facecolor='g')
 
     # Best fit normal distribution line to ln(results)
     bf_line_2 = mlab.normpdf(bins_2, median_flux_log, stdev_flux_log)
@@ -878,96 +995,194 @@ def monte_carlo_plot(interface_fluxes, mean_flux, stdev_flux, skewness, p_value,
 
     [left_log, right_log] = ax6.get_xlim()
     [bottom_log, top_log] = ax6.get_ylim()
-    ax6.text((left_log+(right_log-left_log)/20), (top_log-(top_log-bottom_log)/20), '$sk\ =\ {}$'.format(np.round(skewness_log, 2)))
-    ax6.text((left_log+(right_log-left_log)/20), (top_log-(top_log-bottom_log)/10), "$K-S\ p-value\ =\ {}$".format(np.round(p_value_log, 2)))
-
+    ax6.text((left_log+(right_log-left_log)/20),
+             (top_log-(top_log-bottom_log)/20),
+             '$sk\ =\ {}$'.format(np.round(skewness_log, 2)))
+    ax6.text((left_log+(right_log-left_log)/20),
+             (top_log-(top_log-bottom_log)/10),
+             "$K-S\ p-value\ =\ {}$".format(np.round(p_value_log, 2)))
     return mc_figure
 
+
 def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
-                burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,r_squared,
-                           age_depth_boundaries,sedrate,advection,Precision,Ds,
-                           TempD,bottom_temp,bottom_temp_est,cycles,
-                           por_error,mean_flux,median_flux,stdev_flux,
-                           skewness,p_value,mean_flux_log,median_flux_log,
-                           stdev_flux_log,stdev_flux_lower,stdev_flux_upper,
-                           skewness_log,p_value_log,runtime_errors,Date,Comments,Complete):
+                 burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,
+                 r_squared,age_depth_boundaries,sedrate,advection,Precision,Ds,
+                 TempD,bottom_temp,bottom_temp_est,cycles,por_error,mean_flux,
+                 median_flux,stdev_flux,skewness,p_value,mean_flux_log,
+                 median_flux_log,stdev_flux_log,stdev_flux_lower,
+                 stdev_flux_upper,skewness_log,p_value_log,runtime_errors,Date,
+                 Comments,Complete):
+    """
+    Send the output of interface_flux.py or flux_rerun.py to the
+    MySQL database. If data for a particular site already exists, replaces
+    old data with new data.
+
+    con:              database engine connection
+    Solute_db:        solute name for inserting into database
+    site_key:         MySQL database site key
+    Leg:              drilling leg/expedition number
+    Site:             drilling site number
+    Hole:             drilling hole IDs
+    Solute:           solute name in database
+    flux:             solute flux at z (mol m^-2 y^-1). Positive flux value is
+                      downward (into the sediment)
+    burial_flux:      solute flux due to pore water burial at z (mol m^-2 y^-1)
+    gradient:         pore water solute concentration gradient at z (mol m^-1)
+    porosity:         porosity at z
+    z:                depth at which flux is calculated (mbsf)
+    dp:               concentration datapoints below seafloor used for line fit
+    bottom_conc:      ocean bottom water solute concentration (mM)
+    conc_fit:         parameters of solute concentration curve (see conc_curve)
+    r_squared:        R-squared of regression between model and measurements
+    age_depth_boundaries: bounds between discrete sedimentation rate regimes
+    sedrate:          modern sediment accumulation rate (solid volume per year)
+    advection:        external advection rate (m/y)
+    Precision:        relative standard deviation of concentration measurements
+    Ds:               diffusion coefficient at reference temperature (m^2 y^-1)
+    TempD:            reference temperature of diffusion coefficient (C)
+    bottom_temp:      ocean bottom water temperature (C)
+    bottom_temp_est:  ocean bottom water temperature parameter for estimation
+    cycles:           number of monte carlo simulations to run
+    por_error:        relative standard deviation of porosity fit
+    mean_flux:        average solute flux from monte carlo simulation
+    median_flux:      median solute flux from monte carlo simulation
+    stdev_flux:       standard deviation of solute flux from monte carlo sim.
+    skewness:         skewness of distribution of fluxes from monte carlo sim.
+    p_value:          Kolmogorov-Smirvov p-value of distribution of fluxes
+    mean_flux_log:    log-normal average of fluxes from monte carlo sim.
+    median_flux_log:  log-normal median of fluxes from monte carlo sim.
+    stdev_flux_log:   log-normal standard deviation of fluxes from m.c. sim.
+    stdev_flux_lower: upper log-normal value for 1 standard deviation
+    stdev_flux_upper: lower log-normal value for 1 standard deviation
+    skewness_log:     skewness of distribution of log-normal fluxes
+    p_value_log:      Kolmogorov-Smirvov p-value of log-normal fluxes
+    runtime_errors:   number of errors from line-fitting procedure
+    Date:             date the site was modeled
+    Complete:         if "yes", modeling is complete for this site
+    Comments:         comments for this location or dataset
+    """
+
     # Send metadata to database
     sql= """insert into metadata_{}_flux (site_key,leg,site,hole,solute,
-                   interface_flux,burial_flux,gradient,top_por,flux_depth,datapoints,
-                   bottom_conc,conc_fit,r_squared,age_depth_boundaries,sed_rate,advection,
-                   measurement_precision,ds,ds_reference_temp,bottom_temp,
-                   bottom_temp_est,mc_cycles,porosity_error,mean_flux,median_flux,
-                   stdev_flux,skewness,p_value,mean_flux_log,median_flux_log,
-                   stdev_flux_log,stdev_flux_lower,stdev_flux_upper,skewness_log,
-                   p_value_log,runtime_errors,run_date,comments,complete)
-                   VALUES ({}, '{}', '{}', '{}', '{}', {}, {}, {}, {}, {}, {},
-                   {}, '{}', {},'{}', {}, {}, {}, {}, {}, {}, '{}', {}, {}, {}, {},
-                   {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},'{}','{}', '{}')
-                   ON DUPLICATE KEY UPDATE hole='{}', solute='{}', interface_flux={},
-                   burial_flux={}, gradient={}, top_por={}, flux_depth={},
-                   datapoints={}, bottom_conc={}, conc_fit='{}', r_squared={},
-                   age_depth_boundaries='{}', sed_rate={}, advection={},
-                   measurement_precision={}, ds={}, ds_reference_temp={},
-                   bottom_temp={}, bottom_temp_est='{}', mc_cycles={},
-                   porosity_error={}, mean_flux={}, median_flux={},
-                   stdev_flux={}, skewness={}, p_value={}, mean_flux_log={},
-                   median_flux_log={}, stdev_flux_log={}, stdev_flux_lower={},
-                   stdev_flux_upper={}, skewness_log={}, p_value_log={},runtime_errors={},
-                   run_date='{}', comments='{}', complete='{}'
-                   ;""".format(Solute_db, site_key,Leg,Site,Hole,Solute,
-                               flux,burial_flux,gradient,porosity,
-                               z,dp,bottom_conc,conc_fit,r_squared,
-                               age_depth_boundaries,sedrate,advection,
-                               Precision,Ds,TempD,
-                               bottom_temp,bottom_temp_est,cycles,
-                               por_error,mean_flux,median_flux,stdev_flux,
-                               skewness,p_value,mean_flux_log,median_flux_log,
-                               stdev_flux_log,stdev_flux_lower,stdev_flux_upper,
-                               skewness_log,p_value_log,runtime_errors,Date,Comments,Complete,
-                               Hole,Solute,
-                               flux,burial_flux,gradient,porosity,
-                               z,dp,bottom_conc,conc_fit,r_squared,
-                               age_depth_boundaries,sedrate,advection,
-                               Precision,Ds,TempD,
-                               bottom_temp,bottom_temp_est,cycles,
-                               por_error,mean_flux,median_flux,stdev_flux,
-                               skewness,p_value,mean_flux_log,median_flux_log,
-                               stdev_flux_log,stdev_flux_lower,stdev_flux_upper,
-                               skewness_log,p_value_log,runtime_errors,Date,Comments,Complete)
+                                          interface_flux,burial_flux,gradient,
+                                          top_por,flux_depth,datapoints,
+                                          bottom_conc,conc_fit,r_squared,
+                                          age_depth_boundaries,sed_rate,
+                                          advection,measurement_precision,ds,
+                                          ds_reference_temp,bottom_temp,
+                                          bottom_temp_est,mc_cycles,
+                                          porosity_error,mean_flux,median_flux,
+                                          stdev_flux,skewness,p_value,
+                                          mean_flux_log,median_flux_log,
+                                          stdev_flux_log,stdev_flux_lower,
+                                          stdev_flux_upper,skewness_log,
+                                          p_value_log,runtime_errors,run_date,
+                                          comments,complete)
+            VALUES ({}, '{}', '{}', '{}', '{}', {}, {}, {}, {}, {}, {}, {},
+                    '{}', {},'{}', {}, {}, {}, {}, {}, {}, '{}', {}, {}, {},
+                    {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},'{}','{}',
+                    '{}')
+            ON DUPLICATE KEY UPDATE hole='{}', solute='{}', interface_flux={},
+            burial_flux={}, gradient={}, top_por={}, flux_depth={},
+            datapoints={}, bottom_conc={}, conc_fit='{}', r_squared={},
+            age_depth_boundaries='{}', sed_rate={}, advection={},
+            measurement_precision={}, ds={}, ds_reference_temp={},
+            bottom_temp={}, bottom_temp_est='{}', mc_cycles={},
+            porosity_error={}, mean_flux={}, median_flux={},
+            stdev_flux={}, skewness={}, p_value={}, mean_flux_log={},
+            median_flux_log={}, stdev_flux_log={}, stdev_flux_lower={},
+            stdev_flux_upper={}, skewness_log={}, p_value_log={},
+            runtime_errors={}, run_date='{}', comments='{}', complete='{}'
+            ;""".format(Solute_db, site_key,Leg,Site,Hole,Solute,
+                        flux,burial_flux,gradient,porosity,
+                        z,dp,bottom_conc,conc_fit,r_squared,
+                        age_depth_boundaries,sedrate,advection,
+                        Precision,Ds,TempD,bottom_temp,bottom_temp_est,cycles,
+                        por_error,mean_flux,median_flux,stdev_flux,skewness,
+                        p_value,mean_flux_log,median_flux_log,stdev_flux_log,
+                        stdev_flux_lower,stdev_flux_upper,skewness_log,
+                        p_value_log,runtime_errors,Date,Comments,Complete,
+                        Hole,Solute,flux,burial_flux,gradient,porosity,
+                        z,dp,bottom_conc,conc_fit,r_squared,
+                        age_depth_boundaries,sedrate,advection,Precision,Ds,
+                        TempD,bottom_temp,bottom_temp_est,cycles,
+                        por_error,mean_flux,median_flux,stdev_flux,
+                        skewness,p_value,mean_flux_log,median_flux_log,
+                        stdev_flux_log,stdev_flux_lower,stdev_flux_upper,
+                        skewness_log,p_value_log,runtime_errors,Date,Comments,
+                        Complete)
     con.execute(sql)
 
 
 def flux_only_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
-                burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,r_squared,
-                           age_depth_boundaries,sedrate,advection,Precision,Ds,
-                           TempD,bottom_temp,bottom_temp_est,Date,Comments,Complete):
+                       burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,
+                       r_squared,age_depth_boundaries,sedrate,advection,
+                       Precision,Ds,TempD,bottom_temp,bottom_temp_est,Date,
+                       Comments,Complete):
+    """
+    Send the output of initial_flux.py to the MySQL database. Does not include
+    any data from Monte Carlo simulation. If data for a particular site
+    already exists, replaces old data with new data.
+
+        con:              database engine connection
+    Solute_db:        solute name for inserting into database
+    site_key:         MySQL database site key
+    Leg:              drilling leg/expedition number
+    Site:             drilling site number
+    Hole:             drilling hole IDs
+    Solute:           solute name in database
+    flux:             solute flux at z (mol m^-2 y^-1). Positive flux value is
+                      downward (into the sediment)
+    burial_flux:      solute flux due to pore water burial at z (mol m^-2 y^-1)
+    gradient:         pore water solute concentration gradient at z (mol m^-1)
+    porosity:         porosity at z
+    z:                depth at which flux is calculated (mbsf)
+    dp:               concentration datapoints below seafloor used for line fit
+    bottom_conc:      ocean bottom water solute concentration (mM)
+    conc_fit:         parameters of solute concentration curve (see conc_curve)
+    r_squared:        R-squared of regression between model and measurements
+    age_depth_boundaries: bounds between discrete sedimentation rate regimes
+    sedrate:          modern sediment accumulation rate (solid volume per year)
+    advection:        external advection rate (m/y)
+    Precision:        relative standard deviation of concentration measurements
+    Ds:               diffusion coefficient at reference temperature (m^2 y^-1)
+    TempD:            reference temperature of diffusion coefficient (C)
+    bottom_temp:      ocean bottom water temperature (C)
+    bottom_temp_est:  ocean bottom water temperature parameter for estimation
+    Date:             date the site was modeled
+    Complete:         if "yes", modeling is complete for this site
+    Comments:         comments for this location or dataset
+    """
+
     # Send metadata to database
     sql= """insert into metadata_{}_flux (site_key,leg,site,hole,solute,
-                   interface_flux,burial_flux,gradient,top_por,flux_depth,datapoints,
-                   bottom_conc,conc_fit,r_squared,age_depth_boundaries,sed_rate,advection,
-                   measurement_precision,ds,ds_reference_temp,bottom_temp,
-                   bottom_temp_est,run_date,comments,complete)
-                   VALUES ({}, '{}', '{}', '{}', '{}', {}, {}, {}, {}, {}, {},
-                   {}, '{}', {},'{}', {}, {}, {}, {}, {}, {}, '{}','{}','{}','{}')
-                   ON DUPLICATE KEY UPDATE hole='{}', solute='{}', interface_flux={},
-                   burial_flux={}, gradient={}, top_por={}, flux_depth={},
-                   datapoints={}, bottom_conc={}, conc_fit='{}', r_squared={},
-                   age_depth_boundaries='{}', sed_rate={}, advection={},
-                   measurement_precision={}, ds={}, ds_reference_temp={},
-                   bottom_temp={}, bottom_temp_est='{}',
-                   run_date='{}', comments='{}', complete='{}'
-                   ;""".format(Solute_db, site_key,Leg,Site,Hole,Solute,
-                               flux,burial_flux,gradient,porosity,
-                               z,dp,bottom_conc,conc_fit,r_squared,
-                               age_depth_boundaries,sedrate,advection,
-                               Precision,Ds,TempD,bottom_temp,bottom_temp_est,
-                               Date,Comments,Complete,
-                               Hole,Solute,flux,burial_flux,gradient,porosity,
-                               z,dp,bottom_conc,conc_fit,r_squared,
-                               age_depth_boundaries,sedrate,advection,
-                               Precision,Ds,TempD,bottom_temp,bottom_temp_est,
-                               Date,Comments,Complete)
+                                          interface_flux,burial_flux,gradient,
+                                          top_por,flux_depth,datapoints,
+                                          bottom_conc,conc_fit,r_squared,
+                                          age_depth_boundaries,sed_rate,
+                                          advection,measurement_precision,ds,
+                                          ds_reference_temp,bottom_temp,
+                                          bottom_temp_est,run_date,comments,
+                                          complete)
+            VALUES ({}, '{}', '{}', '{}', '{}', {}, {}, {}, {}, {}, {}, {},
+                    '{}', {},'{}', {}, {}, {}, {}, {}, {}, '{}','{}','{}','{}')
+            ON DUPLICATE KEY UPDATE hole='{}', solute='{}', interface_flux={},
+            burial_flux={}, gradient={}, top_por={}, flux_depth={},
+            datapoints={}, bottom_conc={}, conc_fit='{}', r_squared={},
+            age_depth_boundaries='{}', sed_rate={}, advection={},
+            measurement_precision={}, ds={}, ds_reference_temp={},
+            bottom_temp={}, bottom_temp_est='{}', run_date='{}',
+            comments='{}', complete='{}'
+            ;""".format(Solute_db, site_key,Leg,Site,Hole,Solute,
+                        flux,burial_flux,gradient,porosity,z,dp,bottom_conc,
+                        conc_fit,r_squared,age_depth_boundaries,sedrate,
+                        advection, Precision,Ds,TempD,bottom_temp,
+                        bottom_temp_est,Date,Comments,Complete,
+                        Hole,Solute,flux,burial_flux,gradient,porosity,
+                        z,dp,bottom_conc,conc_fit,r_squared,
+                        age_depth_boundaries,sedrate,advection,
+                        Precision,Ds,TempD,bottom_temp,bottom_temp_est,
+                        Date,Comments,Complete)
     con.execute(sql)
-
 
 # eof

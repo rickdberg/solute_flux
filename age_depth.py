@@ -1,15 +1,36 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Aug  2 17:49:51 2016
+Author: Rick Berg, University of Washington School of Oceanography, Seattle WA
 
-@author: rickdberg
-Script for building age-depth profile from biostratigraphy or
-magnetostratigraphy data.
+Module for building age-depth profile from biostratigraphy or
+magnetostratigraphy data of an ocean drilling site.
+Boundaries between different sedimentation rate regimes are manually input
+based on visual inspection of data. This module does not specify particular
+holes at drilling site, uses all data from site.
 
-Boundaries between different sedimentation rates are manually input based on
-visual inspection of data.
+Note: Ages in database must be in years and depths in meters.
 
-Inputs: Leg, Site, Hole(s), bottom_boundary, age_depth_boundaries
+Inputs:
+Leg:                  drilling leg/expedition number
+Site:                 drilling site number
+Holes:                drilling hole IDs
+bottom_boundary:      lower depth boundary of data to fit (mbsf)
+age_depth_boundaries: indices of age-depth data bounds for piece-wise line fit
+top_age:              sediment age at sediment-water interface (default = 0 y)
+user:                 MySQL database username
+passwd:               MySQL database password
+host:                 MySQL database IP address
+db:                   MYSQL database name
+age_table:            MYSQL database age-depth data table name
+
+Outputs:
+sedrate_ages:    ages at boundaries of sedimentation regime sections (years)
+sedrate_depths:  depths at boundaries of sedimentation regime sections (mbsf)
+datapoints:      number of datapoints to bottom_boundary
+Script:          name of this module
+Date:            date that age-depth module was run on particular site
+
 """
 
 import numpy as np
@@ -23,35 +44,41 @@ import datetime
 Script = os.path.basename(__file__)
 Date = datetime.datetime.now()
 
-# Site ID
+# Site Information
 Leg = '199'
 Site = '1219'
 Holes = "('','A','B')"
+
+# Model Parameters
 Bottom_boundary = 'none' # 'none', or an integer depth
-# age_depth_boundaries = [0, 4, 7] # Index when sorted by age
 age_depth_boundaries = [0,4,15,22,32] # Index when sorted by depth
 top_age = 0  # years
-
-###############################################################################
-###############################################################################
-###############################################################################
-# Load data from database
 
 # Connect to database
 user = 'root'
 passwd = 'neogene227'
 host = '127.0.0.1'
 db = 'iodp_compiled'
+age_table = 'age_depth'
+
+###############################################################################
+###############################################################################
 con = MySQLdb.connect(user=user, passwd=passwd, host=host, db=db)
 cur = con.cursor()
 
-# Sedimentation rate profile (m/y)
-# Note: Input data must have time at depth=0
-sql = """SELECT depth, age FROM age_depth where leg = '{}' and site = '{}' order by 1 ;""".format(Leg, Site, Holes)
+# Load age-depth data
+sql = """SELECT depth, age
+         FROM {}
+         where leg = '{}' and site = '{}' order by 1 ;
+         """.format(age_table, Leg, Site)
 sed = pd.read_sql(sql, con)
 sed = sed.as_matrix()
+
+# If input data don't include time at depth=0, insert top_age
 if min(sed[:,0]) > 0:
     sed = np.vstack((sed, np.array([0,top_age])))
+
+# Sort data by depth
 sed = sed[np.argsort(sed[:,0])]
 if Bottom_boundary == 'none':
     sed = sed
@@ -59,20 +86,21 @@ else:
     deepest_sed_idx = np.searchsorted(sed[:,0], Bottom_boundary)
     sed = sed[:deepest_sed_idx, :]
 
-# Sort by age
-# sed = sed[np.argsort(sed[:,1])]
+# Print number of age-depth data available
 datapoints = len(sed)
 print('dp:', datapoints)
 
-# Put in for loop to run linear regressions for as many sections as each site has
-
+# Linear age-depth curve
 def age_curve(z, p):
     return p*z
 
+# Plot age-depth data used for fit
 plt.plot(sed[:,1]/1000000, sed[:,0], "o")
 plt.ylabel('Depth (mbsf)')
 plt.xlabel('Age (Ma)')
 
+# Piece-wise Linear regressions for as many sections
+# as specified by age_depth_boundaries
 cut_depths = sed[age_depth_boundaries, 0]
 age_upper = sed[age_depth_boundaries[0], 1]
 sedrate_ages = [age_upper]
@@ -80,7 +108,13 @@ sedrate_depths = [cut_depths[0]]
 for n in np.arange(len(cut_depths)-1):
     depth_upper = cut_depths[n]
     depth_lower = cut_depths[n+1]
-    sed_isolated = np.column_stack((sed[age_depth_boundaries[n]:age_depth_boundaries[n+1]+1,0]-depth_upper, sed[age_depth_boundaries[n]:age_depth_boundaries[n+1]+1,1]-age_upper))
+    sed_isolated = (
+        np.column_stack((sed[age_depth_boundaries[n]:
+                             age_depth_boundaries[n+1]+1,0]
+                         -depth_upper,
+                         sed[age_depth_boundaries[n]:
+                             age_depth_boundaries[n+1]+1,1]
+                         -age_upper)))
     p , e = optimize.curve_fit(age_curve, sed_isolated[:,0], sed_isolated[:,1])
     z = np.linspace(0, depth_lower-depth_upper, 100)
     age = age_curve(z, p)+age_upper
@@ -90,38 +124,29 @@ for n in np.arange(len(cut_depths)-1):
     sedrate_depths.append(depth_lower)
 plt.show()
 
-'''
-cut_depths = sed[age_depth_boundaries, 0]
-last_depth = 0
-last_age = 0
-sedrate_ages = [0]
-sedrate_depths = [0]
-for n in np.arange(len(cut_depths)-1):
-    next_depth = cut_depths[n+1]
-    sed_alt = np.column_stack((sed[:,0]-last_depth, sed[:,1]-last_age))
-    p , e = optimize.curve_fit(age_curve, sed_alt[age_depth_boundaries[n]:age_depth_boundaries[n+1],0], sed_alt[age_depth_boundaries[n]:age_depth_boundaries[n+1],1])
-    z = np.linspace(0, next_depth-last_depth, 100)
-    age = age_curve(z, p)+last_age
-    plt.plot(age/1000000, z+last_depth, '-x')
-    last_age = age_curve(z[-1], *p)+last_age
-    last_depth = cut_depths[n+1]
-    sedrate_ages.append(last_age)
-    sedrate_depths.append(last_depth)
-plt.show()
-'''
-
 # Formatting for input into SQL database metadata table
 Hole = ''.join(filter(str.isalpha, Holes))
 
-# Save metadata in database
-cur.execute("""select site_key from site_info where leg = '{}' and site = '{}' ;""".format(Leg, Site))
+# Load metadata in database
+cur.execute("""select site_key
+               from site_info
+               where leg = '{}' and site = '{}' ;
+               """.format(Leg, Site))
 site_key = cur.fetchone()[0]
-cur.execute("""insert into metadata_sed_rate (site_key, leg, site, hole,
-bottom_boundary, age_depth_boundaries, sedrate_ages, sedrate_depths, datapoints, script, run_date)
-VALUES ({}, '{}', '{}', '{}', '{}', '{}', '{}', '{}', {}, '{}', '{}')  ON DUPLICATE KEY UPDATE hole='{}',
-bottom_boundary='{}', age_depth_boundaries='{}', sedrate_ages='{}', sedrate_depths='{}', datapoints={},
-script='{}', run_date='{}' ;""".format(site_key, Leg, Site, Hole, Bottom_boundary, age_depth_boundaries, sedrate_ages, sedrate_depths, datapoints, Script, Date,
-Hole, Bottom_boundary, age_depth_boundaries, sedrate_ages, sedrate_depths, datapoints, Script, Date))
+cur.execute(
+    """insert into metadata_sed_rate (site_key, leg, site, hole,
+                                      bottom_boundary, age_depth_boundaries,
+                                      sedrate_ages, sedrate_depths,
+                                      datapoints,script, run_date)
+       VALUES ({}, '{}', '{}', '{}', '{}', '{}', '{}', '{}', {}, '{}', '{}')
+       ON DUPLICATE KEY UPDATE hole='{}',bottom_boundary='{}',
+       age_depth_boundaries='{}', sedrate_ages='{}', sedrate_depths='{}',
+       datapoints={}, script='{}', run_date='{}' ;
+       """.format(site_key, Leg, Site, Hole, Bottom_boundary,
+                  age_depth_boundaries, sedrate_ages, sedrate_depths,
+                  datapoints, Script, Date,
+                  Hole, Bottom_boundary, age_depth_boundaries, sedrate_ages,
+                  sedrate_depths, datapoints, Script, Date))
 con.commit()
 
 # eof

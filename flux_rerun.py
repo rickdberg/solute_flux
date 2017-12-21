@@ -3,7 +3,7 @@
 Created on Sun Apr 16 19:22:16 2017
 Author: Rick Berg, University of Washington School of Oceanography, Seattle WA
 
-Module to re-calculate fluxes that already have already been run and stored in
+Module to re-calculate fluxes that have already been run and stored in
 the MySQL database using interface_flux.py.
 For use if any substantive changes are made in flux_functions.py.
 
@@ -24,7 +24,8 @@ hole_info:      name of MySQL hole information table
 
 Outputs are the same as interface_flux.py
 Outputs:
-flux:                 solute flux at z (mol m^-2 y^-1)
+flux:                 solute flux at z (mol m^-2 y^-1). Positive flux value is
+                      downward (into the sediment)
 burial_flux:          solute flux due to pore water burial at z (mol m^-2 y^-1)
 gradient:             pore water solute concentration gradient at z (mol m^-1)
 porosity:             porosity at z
@@ -41,11 +42,11 @@ median_flux:          median solute flux from monte carlo simulation
 stdev_flux:           standard deviation of solute flux from monte carlo sim.
 skewness:             skewness of distribution of fluxes from monte carlo sim.
 p_value:              Kolmogorov-Smirvov p-value of distribution of fluxes
-mean_flux_log:        Log-normal average of fluxes from monte carlo sim.
-median_flux_log:      Log-normal median of fluxes from monte carlo sim.
-stdev_flux_log:       Log-normal standard deviation of fluxes from monte carlo sim.
-stdev_flux_lower:     Upper log-normal value for 1 standard deviation
-stdev_flux_upper:     Lower log-normal value for 1 standard deviation
+mean_flux_log:        log-normal average of fluxes from monte carlo sim.
+median_flux_log:      log-normal median of fluxes from monte carlo sim.
+stdev_flux_log:       log-normal standard deviation of fluxes from monte carlo sim.
+stdev_flux_lower:     upper log-normal value for 1 standard deviation
+stdev_flux_upper:     lower log-normal value for 1 standard deviation
 skewness_log:         skewness of distribution of log-normal fluxes
 p_value_log:          Kolmogorov-Smirvov p-value of distribution of log-normal fluxes
 runtime_errors:       number of runtime errors resulting from line-fitting procedure
@@ -70,8 +71,8 @@ cycles = 5000
 line_fit = 'exponential'
 
 # Species parameters
-Ocean = 54  # Concentration in modern ocean (mM)
-Solute_db = 'Mg' # Solute label for database input
+Ocean = 54
+Solute_db = 'Mg'
 
 # Connect to database
 engine = create_engine("mysql://root:neogene227@localhost/iodp_compiled")
@@ -82,12 +83,14 @@ metadata_table = "metadata_mg_flux"
 site_info = "site_info"
 hole_info = "summary_all"
 
+###############################################################################
+###############################################################################
 sql = """select *
 from {}
 ;""".format(metadata_table)
 metadata = pd.read_sql(sql, engine)
 
-for i in np.arange(np.size(metadata, axis=0))[108:]:
+for i in np.arange(np.size(metadata, axis=0))[:]:
     cycles = 5000
     Complete = 'yes'
     Comments = metadata.comments[i]
@@ -117,9 +120,10 @@ for i in np.arange(np.size(metadata, axis=0))[108:]:
         print('Failed initial concentration fit, Site', Site)
         Complete = 'no'
         continue
-    conc_interp_fit_plot = ff.conc_curve(line_fit)(np.linspace(concunique[0,0],
-                                                               concunique[dp-1,0],
-                                                               num=50), *conc_fit)
+    conc_interp_fit_plot = (
+        ff.conc_curve(line_fit)(np.linspace(concunique[0,0],
+                                            concunique[dp-1,0],
+                                            num=50), *conc_fit))
 
     # R-squared function
     r_squared = ff.rsq(ff.conc_curve(line_fit)(concunique[:dp,0], *conc_fit),
@@ -168,11 +172,11 @@ for i in np.arange(np.size(metadata, axis=0))[108:]:
     plt.close('all')
 
     # Monte Carlo Simulation
-    interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors, conc_fits = ff.monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit)
+    fluxes_real, fluxes_log_real, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors, conc_fits = ff.monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit)
 
     # Plot Monte Carlo Distributions
-    mc_figure = ff.monte_carlo_plot(interface_fluxes, median_flux, stdev_flux,
-                                    skewness, p_value, interface_fluxes_log,
+    mc_figure = ff.monte_carlo_plot(fluxes_real, median_flux, stdev_flux,
+                                    skewness, p_value, fluxes_log_real,
                                     median_flux_log, stdev_flux_log,
                                     skewness_log, p_value_log)
 
@@ -183,7 +187,7 @@ for i in np.arange(np.size(metadata, axis=0))[108:]:
     mc_figure.clf()
     np.savetxt(
         r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\monte carlo_{}_{}_{}.csv"
-        .format(Solute_db, Leg, Site), interface_fluxes, delimiter=",")
+        .format(Solute_db, Leg, Site), fluxes_real, delimiter=",")
 
     # Date and time
     Date = datetime.datetime.now()

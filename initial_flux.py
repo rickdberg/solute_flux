@@ -8,7 +8,6 @@ interface at ocean drilling locations, accounting for diffusion,
 advection, and pore water burial with compaction.
 Module is designed to be paired with a MySQL database of ocean drilling data.
 See flux_functions.py for detailed descriptions of each function used.
-Positive flux value is downward (into the sediment)
 
 Intended primarily for data exploration purposes and parameter fitting.
 Can also be used to adjust parameters before running flux_rerun.py.
@@ -41,7 +40,8 @@ site_info:      name of MySQL site information table
 hole_info:      name of MySQL hole information table
 
 Outputs:
-flux:                 solute flux at z (mol m^-2 y^-1)
+flux:                 solute flux at z (mol m^-2 y^-1). Positive flux value is
+                      downward (into the sediment)
 burial_flux:          solute flux due to pore water burial at z (mol m^-2 y^-1)
 gradient:             pore water solute concentration gradient at z (mol m^-1)
 porosity:             porosity at z
@@ -65,13 +65,9 @@ from sqlalchemy import create_engine
 import flux_functions as ff
 from site_metadata_compiler import metadata_compiler
 
-plt.close('all')
-###############################################################################
-###############################################################################
-###############################################################################
 # Site Information
-Leg = '199'
-Site = '1219'
+Leg = '190'
+Site = '1178'
 Holes = "('A','B') or hole is null"
 Comments = ''
 Complete = 'no'
@@ -87,21 +83,21 @@ Solute_db = 'Mg'
 # Model parameters
 z = 0
 line_fit = 'exponential'
-dp = 7
+dp = 8
 
 # Connect to database
 engine = create_engine("mysql://root:neogene227@localhost/iodp_compiled")
-con = engine.connect()
 conctable = 'iw_all'
 portable = 'mad_all'
 metadata_table = "metadata_mg_flux"
 site_info = "site_info"
 hole_info = "summary_all"
-# Formatting for saving in metadata
-Hole = ''.join(filter(str.isupper, filter(str.isalpha, Holes)))
 
 ###############################################################################
 ###############################################################################
+con = engine.connect()
+plt.close('all')
+
 # Load and prepare all input data
 site_metadata = metadata_compiler(engine, metadata_table, site_info,
                                   hole_info, Leg, Site)
@@ -154,10 +150,10 @@ figure_1 = ff.flux_plots(concunique, conc_interp_fit_plot, por, por_all,
                          Leg, Site, Solute_db, flux, dp, temp_gradient)
 figure_1.show()
 
-# Date and time
+# Retrieve misc metadata
+Hole = ''.join(filter(str.isupper, filter(str.isalpha, Holes)))
 Date = datetime.datetime.now()
 
-# Retrieve Site key
 site_key = con.execute("""select site_key
                 from site_info
                 where leg = '{}' and site = '{}'

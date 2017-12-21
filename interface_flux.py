@@ -5,12 +5,11 @@ Author: Rick Berg, University of Washington School of Oceanography, Seattle WA
 
 Module to calculate the total flux of a solute across the sediment-water
 interface at ocean drilling locations, accounting for diffusion,
-advection, and pore water burial with compaction.
+advection, and pore water burial with compaction. Although meant for the
+sediment-water interface, the module is generalized to calculate the flux
+across any depth horizon.
 Module is designed to be paired with a MySQL database of ocean drilling data.
 See flux_functions.py for detailed descriptions of each function used.
-
-Flux is given in mol m^-2 y^-1
-Positive flux value is downward (into the sediment)
 
 Inputs:
 Leg:            drilling leg/expedition number
@@ -35,10 +34,11 @@ site_info:      name of MySQL site information table
 hole_info:      name of MySQL hole information table
 
 In addition, filepaths to directories where the figures and output data are to
-be stored should be specified in the script.
+be stored need to be specified in the script.
 
 Outputs:
-flux:                 solute flux at z (mol m^-2 y^-1)
+flux:                 solute flux at z (mol m^-2 y^-1). Positive flux value is
+                      downward (into the sediment)
 burial_flux:          solute flux due to pore water burial at z (mol m^-2 y^-1)
 gradient:             pore water solute concentration gradient at z (mol m^-1)
 porosity:             porosity at z
@@ -78,13 +78,9 @@ from sqlalchemy import create_engine
 import flux_functions as ff
 from site_metadata_compiler import metadata_compiler
 
-plt.close('all')
-###############################################################################
-###############################################################################
-###############################################################################
 # Site Information
-Leg = '199'
-Site = '1219'
+Leg = '190'
+Site = '1178'
 Holes = "('A','B') or hole is null"
 Comments = ''
 
@@ -100,24 +96,22 @@ Solute_db = 'Mg'
 z = 0
 cycles = 5000
 line_fit = 'exponential'
-dp = 7
+dp = 8
 
 # Connect to database
 engine = create_engine("mysql://root:neogene227@localhost/iodp_compiled")
-con = engine.connect()
 conctable = 'iw_all'
 portable = 'mad_all'
 metadata_table = "metadata_mg_flux"
 site_info = "site_info"
 hole_info = "summary_all"
 
-# Formatting for saving in metadata
-Hole = ''.join(filter(str.isupper, filter(str.isalpha, Holes)))
-
 ###############################################################################
 ###############################################################################
+con = engine.connect()
 Complete = 'yes'
 runtime_errors = 0
+plt.close('all')
 
 # Load and prepare all input data
 site_metadata = metadata_compiler(engine, metadata_table, site_info,
@@ -172,7 +166,7 @@ r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux fig
 
 
 # Monte Carlo Simulation
-interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors = ff.monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit)
+interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors, conc_fits = ff.monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit)
 
 # Plot Monte Carlo Distributions
 mc_figure =ff.monte_carlo_plot(interface_fluxes, median_flux, stdev_flux,
@@ -189,10 +183,9 @@ np.savetxt(
 r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\monte carlo_{}_{}_{}.csv"
 .format(Solute_db, Leg, Site), interface_fluxes, delimiter=",")
 
-# Date and time
+# Retrieve misc metadata
+Hole = ''.join(filter(str.isupper, filter(str.isalpha, Holes)))
 Date = datetime.datetime.now()
-
-# Retrieve Site key
 site_key = con.execute("""select site_key
                 from site_info
                 where leg = '{}' and site = '{}'
