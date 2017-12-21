@@ -1,10 +1,28 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sun Apr 16 14:39:00 2017
+Author: Rick Berg, University of Washington School of Oceanography, Seattle WA
 
-@author: rickdberg
+Module for calculating flux of solutes into/out of sediments.
 
-Modules for calculating flux of solutes into/out of sediments
+Includes:
+load_and_prep:       load data
+sedtemp:             geothermal gradient function
+d_stp:               free diffusion coefficient at STP
+rsq:                 r-squared of a regression
+conc_curve:          concentration curve function definition
+concentration_fit:   fit parameters of conc_curve to data
+por_curve:           porosity curve function definition (Athy's Law)
+porosity_fit:        fit parameters of por_curve to data
+solid_curve:         compliment to por_curve
+pw_burial:           calculate pore water volume flux
+flux_model:          calculate flux of solute
+monte_carlo:         monte carlo simulation for error of flux_model
+monte_carlo_fract:   monte carlo simulation for error of isotopic fractionation
+flux_plots:          plot flux_model inputs
+monte_carlo_plot:    plot monte carlo simulation distributions
+flux_to_sql:         send results to mysql database
+flux_only_to_sql:    send only fluxes to mysql database (deprecated)
 
 """
 
@@ -19,20 +37,80 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 from matplotlib import mlab
 from scipy import optimize
+from collections import defaultdict
 
 import seawater
 
-from data_handling import averages
 
+def averages(depths, values):
+    """
+     Average duplicates in concentration dataset, add seawater value,
+     and make spline fit to first three values.
 
-# Get site data and prepare for modeling
+     names: depths of samples
+     values: values of samples
+     """
+    # Group values by depth
+    value_lists = defaultdict(list)
+    for depth, value in zip(depths, values):
+        value_lists[depth].append(value)
+
+    # Take average of each list
+    result = {}
+    for depth, values in value_lists.items():
+        result[depth] = sum(values) / float(len(values))
+
+    # Make it a Numpy array and pull out values
+    resultkeys = np.array(list(result.keys()))
+    resultvalues = np.array(list(result.values()))
+    sorted = np.column_stack((resultkeys[np.argsort(resultkeys)],
+                                         resultvalues[np.argsort(resultkeys)]))
+    return sorted
+
+def rmse(model_values, measured_values):
+    """
+    Root mean squared error of curve fit to measured values.
+    """
+    return np.sqrt(((model_values-measured_values)**2).mean())
+
 def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
-                  portable, site_metadata):
+                    portable, site_metadata):
+    """
+    Imports data from MySQL database, prepares data for modeling, and ouputs
+    relevant data for model.
+    Units are listed in function comments.
+
+    Function inputs:
+    Leg:           Drilling leg/expedition number
+    Site:          Drilling site number
+    Holes:         Drilling hole designations
+    Solute:        Solute name in database
+    Ocean:         concentration of conservative solute in the ocean
+    engine:        SQLAlchemy engine
+    conctable:     Name of MySQL solute concentration table
+    portable:      Name of MySQL porosity (MAD) table
+    site_metadata: Site metadata from site_metadata_compiler.py
+
+    Function outputs:
+    concunique:           2D array of sample depth and solute concentration
+    temp_gradient:        geothermal gradient
+    bottom_conc:          ocean bottom water solute concentration (mM)
+    bottom_temp:          ocean bottom water temperature (C)
+    bottom_temp_est:      ocean bottom water temperature parameter for estimation
+    pordata:              2D array of depth below seafloor (m) and porosity
+                           measurements from load_and_prep.
+    seddepths:            sediment accumulation boundaries from load_and_prep function
+    sedtimes:             sediment accumulation boundaries from load_and_prep function
+    sedrate:              modern sediment accumulation rate (solid volume per year)
+    picks:                biostratigraphic age-depth data
+    age_depth_boundaries: boundaries between discrete sedimentation rate regimes
+    advection:            external advection rate
+    """
 
     # Temperature gradient (degrees C/m)
     temp_gradient = site_metadata['temp_gradient'][0]
 
-    # Water depth for bottom water estimation
+    # Water depth for bottom water estimation (m)
     water_depth = site_metadata['water_depth'][0]
 
     # Bottom water temp (degrees C)
@@ -61,12 +139,14 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     concdata = concdata.sort_values(by='sample_depth')
     concdata = concdata.as_matrix()
 
-    # Bottom water concentration of Mg based on WOA bottom salinities.
+    # Bottom water concentration based on WOA bottom salinities.
     woa_salinity = site_metadata['woa_salinity'][0]
     density = seawater.eos80.dens0(woa_salinity, bottom_temp)
-    woa_cl = (1000*(woa_salinity-0.03)*density/1000)/(1.805*35.45)  # Bowles et al reference
+    # Muller 1999, In Grasshoff et al.
+    woa_cl = (1000*(woa_salinity-0.03)*density/1000)/(1.805*35.45)
     bottom_conc=woa_cl/558*Ocean
-    ct0 = [bottom_conc]  # mol per m^3 in modern seawater at specific site
+    # mol per m^3 in modern seawater at specific site
+    ct0 = [bottom_conc]
 
     # Porosity data
     sql = text("""SELECT sample_depth, porosity
@@ -74,14 +154,17 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     where leg = '{}' and site = '{}' and (hole in {})
     and coalesce(method,'C') like '%C%'
     and {} is not null and {} > 0 AND {} < 1 and sample_depth is not null
-    ;""".format(portable, Leg, Site, Holes, 'porosity', 'porosity', 'porosity'))
+    ;""".format(portable, Leg, Site, Holes,'porosity','porosity','porosity'))
     pordata = pd.read_sql(sql, engine)
-    if pordata.iloc[:,1].count() < 40:  # If not enough data from method C, take all data
+    # If not enough data from method C, take all data
+    if pordata.iloc[:,1].count() < 40:
         sql = """SELECT sample_depth, porosity
             FROM {}
             where leg = '{}' and site = '{}' and (hole in {})
-            and {} is not null and {} > 0 AND {} < 1 and sample_depth is not null
-            ;""".format(portable, Leg, Site, Holes, 'porosity', 'porosity', 'porosity')
+            and {} is not null and {} > 0 AND {} < 1
+            and sample_depth is not null
+            ;""".format(portable, Leg, Site, Holes,
+            'porosity', 'porosity', 'porosity')
         pordata_b = pd.read_sql(sql, engine)
         pordata = pd.concat((pordata, pordata_b), axis=0)
     pordata = pordata.as_matrix()
@@ -99,9 +182,8 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     seddepths = np.asarray(sedratedata.iloc[:,1][0][1:-1].split(","))
     sedtimes = sedtimes.astype(np.float)
     seddepths = seddepths.astype(np.float)
-    sedrates = np.diff(seddepths, axis=0)/np.diff(sedtimes, axis=0)  # m/y
-    sedrate = sedrates[0]  # Using modern sedimentation rate
-    # print('Modern sed rate (cm/ky):', np.round(sedrate*100000, decimals=3))
+    sedrates = np.diff(seddepths, axis=0)/np.diff(sedtimes, axis=0)
+    sedrate = sedrates[0]  # Modern sedimentation rate
 
     # Load age-depth data for plots
     sql = """SELECT depth, age
@@ -112,33 +194,48 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     picks = picks.as_matrix()
     picks = picks[np.argsort(picks[:,0])]
 
-    # Age-Depth boundaries from database used in this run
+    # Age-Depth boundaries from database, indices sorted by age
     sql = """SELECT age_depth_boundaries
         FROM metadata_sed_rate
         where leg = '{}' and site = '{}' order by 1
         ;""".format(Leg, Site)
-    age_depth_boundaries = pd.read_sql(sql, engine).iloc[0,0] # Indices when sorted by age
+    age_depth_boundaries = pd.read_sql(sql, engine).iloc[0,0]
 
     ###############################################################################
 
     # Concentration vector after averaging duplicates
     concunique = averages(concdata[:, 0], concdata[:, 1])
+
+    # Add in seawater value as upper boundary if measurement > 5 cmbsf
     if concunique[0,0] > 0.05:
-        concunique = np.concatenate((np.array(([0],ct0)).T, concunique), axis=0)  # Add in seawater value (upper limit)
+        concunique = np.concatenate((np.array(([0],ct0)).T, concunique),
+                                    axis=0)
     return concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection
 
-# Temperature profile (degrees C)
 def sedtemp(z, bottom_temp, temp_gradient):
+    """
+    Geothermal gradient function (C/m)
+
+    z: depth below seafloor (m)
+    bottom_temp: bottom water temperature (C)
+    temp_gradient: temperature gradient (C/m)
+    """
     if z.all() == 0:
         return bottom_temp*np.ones(len(z))
     else:
         return bottom_temp + np.multiply(z, temp_gradient)
 
-
-# Calculates viscosity from Mostafa H. Sharqawy 12-18-2009, MIT (mhamed@mit.edu) Sharqawy M. H., Lienhard J. H., and Zubair, S. M., Desalination and Water Treatment, 2009
-# Viscosity used as input into Stokes-Einstein equation
-# Td is the reference temperature (TempD), T is the in situ temperature
 def d_stp(Td, T, Ds):
+    """
+    Calculates viscosity from Mostafa H. Sharqawy 12-18-2009,
+    MIT (mhamed@mit.edu) (Sharqawy M. H., Lienhard J. H., and Zubair, S. M.,
+    Desalination and Water Treatment, 2009)
+    Viscosity used as input into Stokes-Einstein equation
+
+    Td:  reference temperature
+    T:  in situ temperature
+    Ds: Diffusion coefficient at reference temperature
+    """
     # Viscosity at reference temperature
     muwd = 4.2844324477E-05 + 1/(1.5700386464E-01*(Td+6.4992620050E+01)**2+-9.1296496657E+01)
     A = 1.5409136040E+00 + 1.9981117208E-02 * Td + -9.5203865864E-05 * Td**2
@@ -154,121 +251,225 @@ def d_stp(Td, T, Ds):
     Td = Td+273.15
     return T/vis*visd*Ds/Td  # Stokes-Einstein equation
 
-# Calculate r-squared value of fit
 def rsq(modeled, measured):
+    """
+    Calculate the coefficient of determination (R-squared) value
+    of a regression.
+
+    modeled: model predictions of dependent variable
+    measured: measured values of dependent variable
+    """
     yresid = measured - modeled
     sse = sum(yresid**2)
     sstotal = (len(measured)-1)*np.var(measured)
     return 1-sse/sstotal
 
 def conc_curve(line_fit):
+    """
+    Define the model to fit to concentration data.
+    This function has linear or exponential options for "line_fit".
+    For Athy's Law, a = (v - sqrt(v**2 * 4Dk))/2D.
+
+    z: depth below seafloor
+    a, b, c: parameters to be fit
+    """
     if line_fit == 'exponential':
         def conc_curve_specific(z,a,b,c):
-            return b * np.exp(np.multiply(a,z)) + c # a = (v - sqrt(v**2 * 4Dk))/2D
+            return b * np.exp(np.multiply(a,z)) + c
     elif line_fit == 'linear':
         def conc_curve_specific(z,a,b):
             return a * z + b
     return conc_curve_specific
 
 def concentration_fit(concunique, dp, line_fit):
+    """
+    Find best-fitting parameters to conc_curve functions.
+
+    concunique: concentration and depth array from load_and_prep function
+    dp: number of datapoints from sediment surface to use for fit
+    line_fit: "linear" or "exponential", as specified in conc_curve
+    """
     if line_fit == 'exponential':
         a0 = -0.1
         b0 = concunique[0,1]/5
         c0 = concunique[0,1]
         if np.mean(concunique[1:dp,1]) <= concunique[0,1]:
-            conc_fit, conc_cov = optimize.curve_fit(conc_curve(line_fit), concunique[:dp,0], concunique[:dp,1], p0=[a0,b0,c0], bounds=([-1,-1000,-1000],[1,1000,1000]), method='trf')
+            conc_fit, conc_cov = optimize.curve_fit(conc_curve(line_fit),
+                                                    concunique[:dp,0],
+                                                    concunique[:dp,1],
+                                                    p0=[a0,b0,c0],
+                                                    bounds=([-1,-1000,-1000],
+                                                            [1,1000,1000]),
+                                                    method='trf')
         else:
-            conc_fit, conc_cov = optimize.curve_fit(conc_curve(line_fit), concunique[:dp,0], concunique[:dp,1], p0=[-a0,-b0,c0], bounds=([-1,-1000,-1000],[1,1000,1000]), method='trf')
+            conc_fit, conc_cov = optimize.curve_fit(conc_curve(line_fit),
+                                                    concunique[:dp,0],
+                                                    concunique[:dp,1],
+                                                    p0=[-a0,-b0,c0],
+                                                    bounds=([-1,-1000,-1000],
+                                                            [1,1000,1000]),
+                                                    method='trf')
     elif line_fit == 'linear':
         a0 = 1
         b0 = 20
         if np.mean(concunique[1:dp,1]) <= concunique[0,1]:
-            conc_fit, conc_cov = optimize.curve_fit(conc_curve(line_fit), concunique[:dp,0], concunique[:dp,1], p0=[-a0,b0], bounds=([-10,-1000],[10,1000]), method='trf')
+            conc_fit, conc_cov = optimize.curve_fit(conc_curve(line_fit),
+                                                    concunique[:dp,0],
+                                                    concunique[:dp,1],
+                                                    p0=[-a0,b0],
+                                                    bounds=([-10,-1000],
+                                                            [10,1000]),
+                                                    method='trf')
         else:
-            conc_fit, conc_cov = optimize.curve_fit(conc_curve(line_fit), concunique[:dp,0], concunique[:dp,1], p0=[a0,b0], bounds=([-10,-1000],[10,1000]), method='trf')
-    # conc_interp_depths = np.arange(0,3,intervalthickness)  # Three equally-spaced points
-    # conc_interp_fit = conc_curve(conc_interp_depths, conc_fit)  # To be used if Boudreau method for conc gradient is used
+            conc_fit, conc_cov = optimize.curve_fit(conc_curve(line_fit),
+                                                    concunique[:dp,0],
+                                                    concunique[:dp,1],
+                                                    p0=[a0,b0],
+                                                    bounds=([-10,-1000],
+                                                            [10,1000]),
+                                                    method='trf')
+    # conc_interp_depths = np.arange(0,3,intervalthickness)
+    # conc_interp_fit = conc_curve(conc_interp_depths, conc_fit)
+    # To be used if Boudreau method for conc gradient is used
     return conc_fit
 
-"""
-# More complex concentration fit, not general enough
-def concentration_fit(concunique, dp):
-    a0 = -0.1
-    b0 = concunique[0,1]/5
-    c0 = concunique[0,1]/5000
-    d0 = concunique[0,1]
-    if np.mean(concunique[1:dp,1]) <= concunique[0,1]:
-        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[a0,b0,-c0,d0], bounds=([-1,-1000,-100,-1000],[1,1000,100,1000]), method='trf')
-    else:
-        conc_fit, conc_cov = optimize.curve_fit(conc_curve, concunique[:dp,0], concunique[:dp,1], p0=[-a0,-b0,c0,d0], bounds=([-1,-1000,-100,-1000],[1,1000,100,1000]), method='trf')
-    # conc_interp_depths = np.arange(0,3,intervalthickness)  # Three equally-spaced points
-    # conc_interp_fit = conc_curve(conc_interp_depths, conc_fit)  # To be used if Boudreau method for conc gradient is used
-    return conc_fit
-"""
-
-# Porosity and solids fraction functions and data preparation
-
-# Porosity curve fit (Modified Athy's Law, ) (Makes porosity at sed surface equal to greatest of first 3 measurements)
 def por_curve(z, por, a):
+    """
+    Porosity curve fit (Modified Athy's Law)
+    Sets porosity at sed surface equal to greatest of first 3 measurements.
+
+    z: depth below seafloor (m)
+    por: 2D array of depth below seafloor (m) and porosity measurements from
+         load_and_prep after putting through data_handling.avergaes function.
+    a: Athy's Law parameter to be fit
+    """
     portop = np.max(por[:3,1])  # Greatest of top 3 porosity measurements for upper porosity boundary
     porbottom = np.mean(por[-3:,1])  # Takes lowest porosity measurement as the lower boundary
     return (portop-porbottom) * np.exp(np.multiply(a, z)) + porbottom
 
-
-# Porosity vectors
 def porosity_fit(por):
+    """
+    Find best-fitting parameters to por_curve function.
+
+    por: 2D array of depth below seafloor (m) and porosity measurements from
+         load_and_prep after putting through data_handling.avergaes function.
+    """
     porvalues = por[:, 1]
     pordepth = por[:, 0]
-
-    por_fit, porcov = optimize.curve_fit(lambda z, a: por_curve(z,por,a), pordepth, porvalues, p0=-0.01)
+    por_fit, porcov = optimize.curve_fit(lambda z, a: por_curve(z,por,a),
+                                         pordepth, porvalues, p0=-0.01)
     return por_fit
 
-# Pore water burial mass flux
-# Solids curve fit (based on porosity curve fit function)
 def solid_curve(z, por, a):
+    """
+    Solids curve function (Compliment of porosity curve fit function)
+
+    z: depth below seafloor (m)
+    por: 2D array of depth below seafloor (m) and porosity measurements from
+         load_and_prep after putting through data_handling.avergaes function.
+    a: Athy's Law parameter to be fit (same as por_curve Athy's parameter)
+
+    """
     portop = np.max(por[:3,1])  # Greatest of top 3 porosity measurements for upper porosity boundary
     porbottom = np.mean(por[-3:,1])  # Takes lowest porosity measurement as the lower boundary
     return 1-((portop-porbottom) * np.exp(np.multiply(a, z)) + porbottom)
 
 def pw_burial(seddepths, sedtimes, por_fit, por):
-    # Sediment mass (1-dimensional volume of solids) accumulation rates for each age-depth section
-    # Assumes constant sediment mass (really volume of solids) accumulation rates between age-depth measurements
+    """
+    Pore water volume (1-dimensional volume of water) accumulation
+    rates for each age-depth section.
+    Assumes constant sediment volume accumulation rates between
+    age-depth measurements.
 
+    seddepths: sediment accumulation boundaries from load_and_prep function
+    sedtimes: sediment accumulation boundaries from load_and_prep function
+    por_fit: Athy's Law parameter from porosity_fit function
+    por: 2D array of depth below seafloor (m) and porosity measurements from
+         load_and_prep after putting through data_handling.avergaes function.
+
+    """
     sectionmass = (integrate.quad(solid_curve, seddepths[0], seddepths[1], args=(por, por_fit)))[0]
     sedmassrate = (sectionmass/np.diff(sedtimes)[0])
 
-    # Pore water burial flux calculation (ref?)
+    # Pore water burial flux calculation
     deeppor = np.mean(por[-3:,1])  # Takes lowest porosity measurement as the lower boundary
     deepsolid = 1 - deeppor
     pwburialflux = deeppor*sedmassrate/deepsolid
     return pwburialflux
 
 # Flux model
-def flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed, advection, dp, Site, line_fit):
+def flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed,
+                advection, dp, Site, line_fit):
+    """
+    Solute flux calculation using 1D advection-diffusion model
+
+    conc_fit: parameters for conc_curve
+    concunique: 2D numpy array of depth and concentration from load_and_prep
+    z: depth below seafloor at which flux is determined (m)
+    pwburialflux: modern pore water burial rate
+    porosity: porosity at z
+    Dsed: diffusion coefficient at z
+    advection: advection rate at z
+    dp: concnetration datapoints below seafloor used for line fit
+    Site: Drilling site number
+    line_fit: "linear" or "exponential", as specified in conc_curve
+
+    """
     if line_fit == 'exponential':
         # gradient = (-3*conc_interp_fit[0] + 4*conc_interp_fit[1] - conc_interp_fit[2])/(2*intervalthickness)  # Approximation according to Boudreau 1997 Diagenetic Models and Their Implementation. Matches well with derivative method
         gradient = conc_fit[1] * conc_fit[0] * np.exp(np.multiply(conc_fit[0], z))  # Derivative of conc_curve @ z
     elif line_fit == 'linear':
         gradient = conc_fit[0]
     burial_flux = pwburialflux * conc_curve(line_fit)(z, *conc_fit)
-    flux = porosity * Dsed * -gradient + (porosity * advection + pwburialflux) * conc_curve(line_fit)(z, *conc_fit)
+    flux = (porosity * Dsed * -gradient +
+            (porosity * advection + pwburialflux)
+            * conc_curve(line_fit)(z, *conc_fit))
     print('Site:', Site, 'Flux (mol/m^2 y^-1):', flux)
     return flux, burial_flux, gradient
 
 def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit):
+    """
+    Monte Carlo simulation of flux_model output to find total error in fluxes
+
+    cycles: Number of simulations to run
+    Precision: relative standard deviation of concentration measurements
+    concunique: 2D numpy array of depth and concentration from load_and_prep
+    bottom_temp_est: bottom water temperature
+    dp: concnetration datapoints below seafloor used for line fit
+    por: 2D array of depth below seafloor (m) and porosity measurements from
+         load_and_prep after putting through data_handling.avergaes function.
+    por_fit: Athy's Law parameter from porosity_fit function
+    seddepths: sediment accumulation boundaries from load_and_prep function
+    sedtimes: sediment accumulation boundaries from load_and_prep function
+    TempD: reference temperature of diffusion coefficient
+    bottom_temp: bottom water temperature
+    z: depth at which flux is calculated
+    advection: external advection rate
+    Leg: Drilling leg/expedition number
+    Site: Drilling site number
+    Solute_db: solute name for inserting into database
+    Ds: Free diffusion coefficient at TempD
+    por_error: porosity measurement error
+    conc_fit: conc_curve parameter values
+    runtime_errors: number of runtime errors=0
+    line_fit: "linear" or "exponential", as specified in conc_curve
+    """
+
     # Porosity offsets - using full gaussian probability
     portop = np.max(por[:3,1])
     if por_error == 0:
         por_error = 0.08 * portop
-    por_offsets = np.random.normal(scale=por_error, size=(cycles, len(por[:,1])))
+    por_offsets = np.random.normal(scale=por_error, size=(cycles,
+                                                          len(por[:,1])))
 
-    # Get randomized porosity matrix (within realistic ranges between 30% and 90%)
+    # Get randomized porosity matrix with realistic ranges between 30% and 90%
     por_rand = np.add(por_curve(por[:,0], por, *por_fit), por_offsets)
     por_rand[por_rand > 0.90] = 0.90
     por_rand[por_rand < 0.30] = 0.30
 
     portop_rand = np.add(portop, por_offsets[:,0])
-    portop_rand = portop_rand[portop_rand > por_curve(por[-1,0], por, *por_fit)]
+    portop_rand = portop_rand[portop_rand > por_curve(por[-1,0],
+                                                      por, *por_fit)]
     portop_rand = portop_rand[portop_rand < 0.90]
 
     cycles = len(portop_rand)
@@ -276,9 +477,10 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
 
     # Concentration offsets - using full gaussian probability
     relativeerror = Precision
-    conc_offsets = np.random.normal(scale=relativeerror, size=(cycles, len(concunique[:dp,1])))
+    conc_offsets = np.random.normal(scale=relativeerror,
+                                    size=(cycles, len(concunique[:dp,1])))
 
-    # Bottom water temperature offsets errors calculated in bottom_temp_error_estimate.py
+    # Bottom water temperature errors calculated in bottom_temp_error_estimate.py
     if bottom_temp_est == 'deep':
         temp_error = 0.5
         temp_offsets = np.random.normal(scale=temp_error, size=cycles)
@@ -304,11 +506,12 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
         offsets.append(offset)
         i = len(offsets)
     '''
-    ###############################################################################
+    ###########################################################################
     # Calculate fluxes for random profiles
 
     # Get randomized concentration matrix (within realistic ranges)
-    conc_rand = np.add(concunique[:dp,1], np.multiply(conc_offsets, concunique[:dp,1]))
+    conc_rand = np.add(concunique[:dp,1],
+                       np.multiply(conc_offsets, concunique[:dp,1]))
     conc_rand[conc_rand < 0] = 0
 
     # Calculate flux
@@ -327,42 +530,46 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
             conc_fit2 = concentration_fit(conc_rand_n, dp, line_fit)
         except RuntimeError:
             runtime_errors += 1
-
+            continue
         conc_fits[n,:] = conc_fit2
         por_fits[n] = por_fit
-
-        # Pore water burial mass flux
-        # Sediment mass (1-dimensional volume of solids) accumulation rates for each age-depth section
-        # Assumes constant sediment mass (really volume of solids) accumulation rates between age-depth measurements
+        # Pore water burial flux
         pwburialflux = pw_burial(seddepths, sedtimes, por_fit, por)
         pwburialfluxes[n] = pwburialflux
 
     # Filter out profiles erroneously fit
-    if line_fit == 'exponential':
-        conc_fits[abs(conc_fits[:,0] - conc_fit[0]) > 0.33 * abs(conc_fits[:,0] + conc_fit[0])/2] = np.nan
-
+    # if line_fit == 'exponential':
+    #    conc_fits[~np.isnan(conc_fits).any(axis=1)][abs(conc_fit[0] - conc_fits[~np.isnan(conc_fits).any(axis=1)][:,0]) > abs(conc_fits[~np.isnan(conc_fits).any(axis=1)][:,0] + conc_fit[0])/2] = np.array([np.nan, np.nan, np.nan])
 
     # Dsed vector
     tortuosity_rand = 1-np.log(portop_rand**2)
     bottom_temp_rand = bottom_temp+temp_offsets
     bottom_temp_rand[bottom_temp_rand < -2] = -2
-
     Dsed_rand = d_stp(TempD, bottom_temp_rand, Ds)/tortuosity_rand
 
-
-    # Plot all the monte carlo runs
+    # For plotting all the monte carlo runs
     # conc_interp_fit_plot = conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), conc_fits)
     # por_interp_fit_plot = conc_curve(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), conc_fits)
 
     # Calculate fluxes
     if line_fit == 'exponential':
-        gradient = conc_fits[:,1] * conc_fits[:,0] * np.exp(np.multiply(conc_fits[:,0], z))
-        interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(line_fit)(z, conc_fits[:,0], conc_fits[:,1], conc_fits[:,2])
+        gradient = (conc_fits[:,1] * conc_fits[:,0]
+                    * np.exp(np.multiply(conc_fits[:,0], z)))
+        interface_fluxes = (portop_rand * Dsed_rand * -gradient
+                            + (portop_rand * advection + pwburialfluxes)
+                            * conc_curve(line_fit)(z,
+                                                   conc_fits[:,0],
+                                                   conc_fits[:,1],
+                                                   conc_fits[:,2]))
     elif line_fit == 'linear':
         gradient = conc_fits[:,0]
-        interface_fluxes = portop_rand * Dsed_rand * -gradient + (portop_rand * advection + pwburialfluxes) * conc_curve(line_fit)(z, conc_fits[:,0], conc_fits[:,1])
+        interface_fluxes = (portop_rand * Dsed_rand * -gradient
+                            + (portop_rand * advection + pwburialfluxes)
+                            * conc_curve(line_fit)(z,
+                                                   conc_fits[:,0],
+                                                   conc_fits[:,1]))
 
-    ###############################################################################
+    ###########################################################################
     # Distribution statistics
 
     # Stats on normal distribution
@@ -381,9 +588,39 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit
     test_stat_log, p_value_log = stats.kstest((interface_fluxes_log[~np.isnan(interface_fluxes_log)]-mean_flux_log)/stdev_flux_log, 'norm')
     stdev_flux_lower = np.exp(-(median_flux_log-stdev_flux_log))
     stdev_flux_upper = np.exp(-(median_flux_log+stdev_flux_log))
-    return interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors
+    return interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors, conc_fits
 
 def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, isotopedata, mg26_24_ocean, line_fit):
+    """
+    Monte Carlo simulation of flux_model (applied to Mg fractionation) outputs
+    to find total error in Mg fractionations.
+
+    cycles: Number of simulations to run
+    Precision: relative standard deviation of concentration measurements
+    Precision_iso: standard deviation of isotope measurements
+    concunique: 2D numpy array of depth and concentration from load_and_prep
+    bottom_temp_est: bottom water temperature
+    dp: concnetration datapoints below seafloor used for line fit
+    por: 2D array of depth below seafloor (m) and porosity measurements from
+         load_and_prep after putting through data_handling.avergaes function.
+    por_fit: Athy's Law parameter from porosity_fit function
+    seddepths: sediment accumulation boundaries from load_and_prep function
+    sedtimes: sediment accumulation boundaries from load_and_prep function
+    TempD: reference temperature of diffusion coefficient
+    bottom_temp: bottom water temperature
+    z: depth at which flux is calculated
+    advection: external advection rate
+    Leg: Drilling leg/expedition number
+    Site: Drilling site number
+    Solute_db: solute name for inserting into database
+    Ds: Free diffusion coefficient at TempD
+    por_error: porosity measurement error
+    conc_fit: conc_curve parameter values
+    runtime_errors: number of runtime errors=0
+    isotopedata: 2D numpy array of depth and isotopic delta values
+    mg26_24_ocean: delta value of the ocean
+    line_fit: "linear" or "exponential", as specified in conc_curve
+    """
     # Porosity offsets - using full gaussian probability
     por_offsets = np.random.normal(scale=por_error, size=(cycles, len(por[:,1])))
 
@@ -405,7 +642,7 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
     # conc_offsets = np.random.normal(scale=relativeerror,
     #                                 size=(cycles, len(isotopedata[:, 3])))
 
-    # Isotopic ratio (in delta notation) offsets - using full gaussian probability
+    # Isotopic ratio (in delta notation) offsets - full gaussian probability
     delta_offsets = Precision_iso[:,None]*np.random.normal(scale=1,
                                             size=(len(Precision_iso), cycles))
 
@@ -453,6 +690,7 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
                 conc_fits[n,:,i] = conc_fit
             except RuntimeError:
                 runtime_errors += 1
+                continue
 
         # Fit exponential curve to each randomized porosity profile
         por_rand_n[:,1] =  por_rand[n,:]
@@ -460,8 +698,6 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
         por_fits[n] = por_fit
 
         # Pore water burial mass flux
-        # Sediment mass (1-dimensional volume of solids) accumulation rates for each age-depth section
-        # Assumes constant sediment mass (really volume of solids) accumulation rates between age-depth measurements
         pwburialflux = pw_burial(seddepths, sedtimes, por_fit, por)
         pwburialfluxes[n] = pwburialflux
 
@@ -505,8 +741,14 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique, bottom_temp_
 
     return alpha, epsilon, cycles, por_error, alpha_mean, alpha_median, alpha_stdev, test_stat, p_value, runtime_errors, conc_fits, fluxes
 
-# Plotting
 def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit, bottom_temp, picks, sedtimes, seddepths, Leg, Site, Solute_db, flux, dp, temp_gradient):
+    """
+    Plot the input data for the flux_model.
+
+
+
+    """
+
     # Set up axes and subplot grid
     mpl.rcParams['mathtext.fontset'] = 'stix'
     #mpl.rcParams['mathtext.rm'] = 'Palatino Linotype'

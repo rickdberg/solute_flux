@@ -1,15 +1,60 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thu Jan 26 16:13:57 2017
+Author: Rick Berg, University of Washington School of Oceanography, Seattle WA
 
-@author: rickdberg
+Module to calculate the total flux of a solute across the sediment-water
+interface at ocean drilling locations, accounting for diffusion,
+advection, and pore water burial with compaction.
+Module is designed to be paired with a MySQL database of ocean drilling data.
+See flux_functions.py for detailed descriptions of each function used.
+Positive flux value is downward (into the sediment)
 
-Module to calculate sediment-water interface fluxes of a dissolved constituent
-Uses an exponential fit to the upper sediment section for concentration gradient
+Intended primarily for data exploration purposes and parameter fitting.
+Can also be used to adjust parameters before running flux_rerun.py.
 
-Does not do Monte Carlo analysis
+********Differences to interface_flux.py*********
+Does not perform Monte Carlo simulation to get flux errors
+Has optional functionality to only send some information to database
+Does not save figures or output data
 
-Positive flux is downward (into the sediment)
+Inputs:
+Leg:            drilling leg/expedition number
+Site:           drilling site number
+Holes:          drilling hole IDs
+Comments:       comments for this location or dataset
+Complete:       If "partial", sends outputs to database, otherwise does not
+Solute:         solute name in database
+Ds:             diffusion coefficient at reference temperature (m^2 y^-1)
+TempD:          reference temperature of diffusion coefficient (C)
+Precision:      relative standard deviation of concentration measurements
+Ocean:          concentration of conservative solute in the ocean (mM)
+Solute_db:      solute name for inserting into database
+z:              depth at which flux is calculated (mbsf)
+line_fit:       "linear" or "exponential" line fit to concentration profile
+dp:             concentration datapoints below seafloor used for line fit
+engine:         SQLAlchemy engine
+conctable:      name of MySQL solute concentration table
+portable:       name of MySQL porosity (MAD) table
+metadata_table: name of MySQL metadata table
+site_info:      name of MySQL site information table
+hole_info:      name of MySQL hole information table
+
+Outputs:
+flux:                 solute flux at z (mol m^-2 y^-1)
+burial_flux:          solute flux due to pore water burial at z (mol m^-2 y^-1)
+gradient:             pore water solute concentration gradient at z (mol m^-1)
+porosity:             porosity at z
+bottom_conc:          ocean bottom water solute concentration (mM)
+conc_fit:             parameters of solute concentration curve (see conc_curve)
+r_squared:            R-squared of regression between model and measurements
+age_depth_boundaries: boundaries between discrete sedimentation rate regimes
+sedrate:              modern sediment accumulation rate (solid volume per year)
+bottom_temp:          ocean bottom water temperature (C)
+bottom_temp_est:      ocean bottom water temperature parameter for estimation
+
+Note: all other ouputs are taken directly from database site information and
+hole information tables.
 
 """
 import numpy as np
@@ -17,37 +62,32 @@ import datetime
 import matplotlib.pyplot as plt
 from sqlalchemy import create_engine
 
-import flux_functions
-import data_handling
+import flux_functions as ff
 from site_metadata_compiler import metadata_compiler
-
 
 plt.close('all')
 ###############################################################################
 ###############################################################################
 ###############################################################################
 # Site Information
-Leg = '154'
-Site = '925'
-Holes = "('A','B','E') or hole is null"
-dp = 15  # Number of concentration datapoints to use for exponential curve fit
-line_fit = 'exponential'
-
-
-
+Leg = '199'
+Site = '1219'
+Holes = "('A','B') or hole is null"
 Comments = ''
 Complete = 'no'
 
 # Species parameters
-Solute = 'Mg'  # Change to Mg_ic if needed, based on what's available in database
-Ds = 1.875*10**-2  # m^2 per year free diffusion coefficient at 18C (ref?)
-TempD = 18  # Temperature at which diffusion coefficient is known
-Precision = 0.02  # measurement precision
-Ocean = 54  # Concentration in modern ocean (mM)
-Solute_db = 'Mg' # Solute label to send to the database
+Solute = 'Mg'  # Change X to X_ic if needed, based on availability in database
+Ds = 1.875*10**-2  # m^2 per year (Li & Gregory 1971)
+TempD = 18  # degrees C
+Precision = 0.02
+Ocean = 54  # mM
+Solute_db = 'Mg'
 
 # Model parameters
-z = 0  # Depth (meters below seafloor) at which to calculate flux
+z = 0
+line_fit = 'exponential'
+dp = 7
 
 # Connect to database
 engine = create_engine("mysql://root:neogene227@localhost/iodp_compiled")
@@ -57,54 +97,62 @@ portable = 'mad_all'
 metadata_table = "metadata_mg_flux"
 site_info = "site_info"
 hole_info = "summary_all"
-Hole = ''.join(filter(str.isupper, filter(str.isalpha, Holes)))  # Formatting for saving in metadata
+# Formatting for saving in metadata
+Hole = ''.join(filter(str.isupper, filter(str.isalpha, Holes)))
 
 ###############################################################################
 ###############################################################################
 # Load and prepare all input data
-site_metadata = metadata_compiler(engine, metadata_table, site_info, hole_info, Leg, Site)
+site_metadata = metadata_compiler(engine, metadata_table, site_info,
+                                  hole_info, Leg, Site)
 
 # dp = int(site_metadata.datapoints[0])
 # Comments = site_metadata.comments[0]
 
-concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = flux_functions.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
+concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
 concunique[1:,1] = concunique[1:,1]
+
 # Fit pore water concentration curve
-conc_fit = flux_functions.concentration_fit(concunique, dp, line_fit)
-conc_interp_fit_plot = flux_functions.conc_curve(line_fit)(np.linspace(concunique[0,0], concunique[dp-1,0], num=50), *conc_fit)
+conc_fit = ff.concentration_fit(concunique, dp, line_fit)
+conc_interp_fit_plot = ff.conc_curve(line_fit)(np.linspace(concunique[0,0],
+                                                            concunique[dp-1,0],
+                                                            num=50), *conc_fit)
 
 # R-squared function
-r_squared = flux_functions.rsq(flux_functions.conc_curve(line_fit)(concunique[:dp,0], *conc_fit), concunique[:dp,1])
+r_squared = ff.rsq(ff.conc_curve(line_fit)(concunique[:dp,0], *conc_fit),
+                   concunique[:dp,1])
 
 # Fit porosity curve
-por = data_handling.averages(pordata[:, 0], pordata[:, 1])  # Average duplicates
+por = ff.averages(pordata[:, 0], pordata[:, 1])
 por_all = por
 if site_metadata.por_cutoff.notnull().all():
     por = por[por[:,0] <= float(site_metadata.por_cutoff[0])]
 
-por_fit = flux_functions.porosity_fit(por)
-por_error = data_handling.rmse(flux_functions.por_curve(por[:,0], por, por_fit), por[:,1])
+por_fit = ff.porosity_fit(por)
+por_error = ff.rmse(ff.por_curve(por[:,0], por, por_fit), por[:,1])
 
 # Sediment properties at flux depth
-porosity = flux_functions.por_curve(z, por, por_fit)[0]
+porosity = ff.por_curve(z, por, por_fit)[0]
 tortuosity = 1-np.log(porosity**2)
 
 # Calculate effective diffusion coefficient
-D_in_situ = flux_functions.d_stp(TempD, bottom_temp, Ds)
+D_in_situ = ff.d_stp(TempD, bottom_temp, Ds)
 Dsed = D_in_situ/tortuosity  # Effective diffusion coefficient
 
 # Calculate pore water burial flux rate
-pwburialflux = flux_functions.pw_burial(seddepths, sedtimes, por_fit, por)
+pwburialflux = ff.pw_burial(seddepths, sedtimes, por_fit, por)
 
 # Calculate solute flux
-flux, burial_flux, gradient = flux_functions.flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed, advection, dp, Site, line_fit)
+flux, burial_flux, gradient = ff.flux_model(conc_fit, concunique, z,
+                                            pwburialflux, porosity, Dsed,
+                                            advection, dp, Site, line_fit)
 
 # Plot input data
 plt.ioff()
-figure_1 = flux_functions.flux_plots(concunique, conc_interp_fit_plot, por, por_all, por_fit, bottom_temp, picks, sedtimes, seddepths, Leg, Site, Solute_db, flux, dp, temp_gradient)
+figure_1 = ff.flux_plots(concunique, conc_interp_fit_plot, por, por_all,
+                         por_fit, bottom_temp, picks, sedtimes, seddepths,
+                         Leg, Site, Solute_db, flux, dp, temp_gradient)
 figure_1.show()
-
-# figure_1.savefig('iodpmg_profiles.png', facecolor='none')
 
 # Date and time
 Date = datetime.datetime.now()
@@ -118,11 +166,10 @@ site_key = site_key.fetchone()[0]
 
 # Send metadata to database
 if Complete == 'partial':
-    flux_functions.flux_only_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
-                burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,r_squared,
-                           age_depth_boundaries,sedrate,advection,Precision,Ds,
-                           TempD,bottom_temp,bottom_temp_est,Date,Comments,Complete)
-
-
+    ff.flux_only_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
+                        burial_flux,gradient,porosity,z,dp,bottom_conc,
+                        conc_fit,r_squared,age_depth_boundaries,sedrate,
+                        advection,Precision,Ds,TempD,bottom_temp,
+                        bottom_temp_est,Date,Comments,Complete)
 
 # eof
