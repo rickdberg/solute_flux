@@ -35,11 +35,11 @@ Date:            date that age-depth module was run on particular site
 
 import numpy as np
 import pandas as pd
-import MySQLdb
 import matplotlib.pyplot as plt
 from scipy import optimize
 import os
 import datetime
+from sqlalchemy import create_engine
 
 Script = os.path.basename(__file__)
 Date = datetime.datetime.now()
@@ -60,11 +60,12 @@ passwd = 'neogene227'
 host = '127.0.0.1'
 db = 'iodp_compiled'
 age_table = 'age_depth'
+database = "mysql://root:neogene227@localhost/iodp_compiled"
+con = create_engine(database)
+cur = con.connect()
 
 ###############################################################################
 ###############################################################################
-con = MySQLdb.connect(user=user, passwd=passwd, host=host, db=db)
-cur = con.cursor()
 
 # Load age-depth data
 sql = """SELECT depth, age
@@ -128,11 +129,11 @@ plt.show()
 Hole = ''.join(filter(str.isalpha, Holes))
 
 # Load metadata in database
-cur.execute("""select site_key
+site_key = cur.execute("""select site_key
                from site_info
                where leg = '{}' and site = '{}' ;
                """.format(Leg, Site))
-site_key = cur.fetchone()[0]
+site_key = site_key.fetchone()[0]
 cur.execute(
     """insert into metadata_sed_rate (site_key, leg, site, hole,
                                       bottom_boundary, age_depth_boundaries,
@@ -147,6 +148,5 @@ cur.execute(
                   datapoints, Script, Date,
                   Hole, Bottom_boundary, age_depth_boundaries, sedrate_ages,
                   sedrate_depths, datapoints, Script, Date))
-con.commit()
 
 # eof
