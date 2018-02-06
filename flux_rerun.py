@@ -117,6 +117,7 @@ for i in np.arange(np.size(metadata, axis=0))[:]:  # If script erros out on spec
     site_metadata = metadata_compiler(engine, metadata_table, site_info,
                                       hole_info, Leg, Site)
     concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
+    # concunique = concunique[1:,:]  # If you don't use bottom water concentration
 
     # Fit pore water concentration curve
     try:
