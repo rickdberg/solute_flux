@@ -71,6 +71,8 @@ TempD = 18  # degrees C
 Precision = 0.02
 Ocean = 54  # mM
 Solute_db = 'Mg'
+ct_d26 = [-0.82]
+ct_d25 = [-0.41]
 
 # Model parameters
 z = 0
@@ -103,7 +105,6 @@ site_metadata = metadata_compiler(engine, metadata_table, site_info,
                                   hole_info, Leg, Site)
 
 concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
-# concunique = concunique[1:,:]  # If you don't use bottom water concentration
 concunique = pd.DataFrame(concunique)
 concunique.columns = ['sample_depth', 'mg_conc']
 if top_boundary != 'seawater':
@@ -150,21 +151,15 @@ isotopedata = pd.merge(isotopedata,
 concunique_mg = concunique.reset_index(drop=True)
 isotopedata = isotopedata.as_matrix()
 
-# Optionally use seawater values or value of first pore water measurement
-# as upper bound (upper boundary condition, dirichlet).
-if top_boundary == 'seawater':
-    ct_d26 = [-0.82]
-    ct_d25 = [-0.41]
-else:
-    ct_d26 = [isotopedata[0,1]]
-    ct_d25 = [isotopedata[0,2]]
+# Optionally use bottom water as upper bound (dirichlet)
 mg26_24_ocean = ((ct_d26[0]/1000)+1)*0.13979
-isotopedata = np.concatenate((np.array(([0],
-                                        ct_d26,
-                                        ct_d25,
-                                        [concunique_mg.iloc[0, 1]])).T,
-                              isotopedata),
-                             axis=0)
+if top_boundary == 'seawater':
+    isotopedata = np.concatenate((np.array(([0],
+                                            ct_d26,
+                                            ct_d25,
+                                            [concunique_mg.iloc[0, 1]])).T,
+                                  isotopedata),
+                                 axis=0)
 
 # Calculate Mg isotope concentrations
 # Decimal numbers are isotopic ratios of standards.
