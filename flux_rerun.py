@@ -83,6 +83,11 @@ metadata_table = "metadata_mg_flux"
 site_info = "site_info"
 hole_info = "summary_all"
 
+#File paths
+flux_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\\"
+mc_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\\"
+mc_text_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\\"
+
 ###############################################################################
 ###############################################################################
 sql = """select *
@@ -90,7 +95,7 @@ from {}
 ;""".format(metadata_table)
 metadata = pd.read_sql(sql, engine)
 
-for i in np.arange(np.size(metadata, axis=0))[:]:
+for i in np.arange(np.size(metadata, axis=0))[:]:  # If script erros out on specific site, can type in index here
     cycles = 5000
     Complete = 'yes'
     Comments = metadata.comments[i]
@@ -165,9 +170,8 @@ for i in np.arange(np.size(metadata, axis=0))[:]:
                              Leg, Site, Solute_db, flux, dp, temp_gradient)
 
     # Save Figure
-    savefig(
-        r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\interface_{}_flux_{}_{}.png"
-        .format(Solute_db, Leg, Site))
+    savefig(flux_fig_path +
+        "interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
     figure_1.clf()
     plt.close('all')
 
@@ -181,13 +185,12 @@ for i in np.arange(np.size(metadata, axis=0))[:]:
                                     skewness_log, p_value_log)
 
     # Save figure and fluxes from each run
-    savefig(
-        r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\montecarlo_{}_{}_{}.png"
-        .format(Solute_db, Leg, Site))
+    savefig(mc_fig_path +
+        "interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
     mc_figure.clf()
-    np.savetxt(
-        r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\monte carlo_{}_{}_{}.csv"
-        .format(Solute_db, Leg, Site), fluxes_real, delimiter=",")
+    np.savetxt(mc_text_path +
+        "monte carlo_{}_{}_{}.csv".format(Solute_db, Leg, Site),
+        fluxes_real, delimiter=",")
 
     # Date and time
     Date = datetime.datetime.now()
