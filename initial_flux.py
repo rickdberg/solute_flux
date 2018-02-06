@@ -106,7 +106,7 @@ site_metadata = metadata_compiler(engine, metadata_table, site_info,
 # Comments = site_metadata.comments[0]
 
 concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
-concunique[1:,1] = concunique[1:,1]
+# concunique = concunique[1:,:]  # If you don't use bottom water concentration
 
 # Fit pore water concentration curve
 conc_fit = ff.concentration_fit(concunique, dp, line_fit)
@@ -160,6 +160,7 @@ site_key = con.execute("""select site_key
                 ;""".format(Leg, Site))
 site_key = site_key.fetchone()[0]
 
+"""
 # Send metadata to database
 if Complete == 'partial':
     ff.flux_only_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
@@ -167,5 +168,6 @@ if Complete == 'partial':
                         conc_fit,r_squared,age_depth_boundaries,sedrate,
                         advection,Precision,Ds,TempD,bottom_temp,
                         bottom_temp_est,Date,Comments,Complete)
+"""
 
 # eof
