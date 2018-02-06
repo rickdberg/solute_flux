@@ -58,9 +58,9 @@ import flux_functions as ff
 from site_metadata_compiler import metadata_compiler
 
 # Site Information
-Leg = '199'
-Site = '1219'
-Holes = "('A','B') or hole is null"
+Leg = '344'
+Site = 'U1414'
+Holes = "('A') or hole is null"
 Comments = ''
 Complete = 'yes'
 
@@ -75,7 +75,7 @@ Solute_db = 'Mg'
 # Model parameters
 z = 0
 cycles = 5000
-line_fit = 'linear'
+line_fit = 'exponential'
 top_boundary = 'seawater'
 dp = 4
 
@@ -86,6 +86,11 @@ portable = 'mad_all'
 metadata_table = "metadata_mg_flux"
 site_info = "site_info"
 hole_info = "summary_all"
+
+# File paths
+flux_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output fractionation figures\\"
+mc_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output fractionation figures\\"
+
 
 ###############################################################################
 ###############################################################################
@@ -98,6 +103,7 @@ site_metadata = metadata_compiler(engine, metadata_table, site_info,
                                   hole_info, Leg, Site)
 
 concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
+# concunique = concunique[1:,:]  # If you don't use bottom water concentration
 concunique = pd.DataFrame(concunique)
 concunique.columns = ['sample_depth', 'mg_conc']
 if top_boundary != 'seawater':
@@ -221,8 +227,8 @@ for n in np.arange(2):
     figure_1.show()
 
     # Save Figure
-    savefig(
-        r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output fractionation figures\interface_{}_fractionation_{}_{}_{}.png"
+    savefig(flux_fig_path +
+        "interface_{}_fractionation_{}_{}_{}.png"
         .format(Solute_db, Leg, Site, n))
     fluxes.append(flux)
 
@@ -270,8 +276,8 @@ con.execute(sql)
 mc_figure = ff.monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev,
                                       alpha_mean, p_value)
 mc_figure.show()
-savefig(
-    r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output fractionation figures\interface_{}_fractionation_distribution_{}_{}.png"
+savefig(mc_fig_path +
+    "interface_{}_fractionation_distribution_{}_{}.png"
     .format(Solute_db, Leg, Site))
 
 print("Mean Epsilon:", round((alpha_mean-1)*1000, 4))
