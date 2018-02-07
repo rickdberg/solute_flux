@@ -38,7 +38,7 @@ flux:                 solute flux at z (mol m^-2 y^-1). Positive flux value is
 burial_flux:          solute flux due to pore water burial at z (mol m^-2 y^-1)
 gradient:             pore water solute concentration gradient at z (mol m^-1)
 porosity:             porosity at z
-bottom_conc:          ocean bottom water solute concentration (mM)
+bottom_conc:          ocean bottom water solute concentration (millimolar)
 conc_fit:             parameters of solute concentration curve (see conc_curve)
 r_squared:            R-squared of regression between model and measurements
 age_depth_boundaries: boundaries between discrete sedimentation rate regimes
