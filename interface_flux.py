@@ -26,6 +26,8 @@ z:              depth at which flux is calculated (mbsf)
 cycles:         number of monte carlo simulations to run
 line_fit:       "linear" or "exponential" line fit to concentration profile
 dp:             concentration datapoints below seafloor used for line fit
+optimized:      'yes' or 'no', whether model parameters and ready to run monte
+                carlo simulation and save output to database for this site
 
 In addition, filepaths to directories where the figures and output data are to
 be stored need to be specified in the script.
@@ -91,11 +93,12 @@ Precision = 0.02
 Ocean = 54
 Solute_db = 'Mg'
 
-# Model parameters
+# Model Parameters
 z = 0
 cycles = 5000
 line_fit = 'exponential'
 dp = 8
+optimized = 'no'  # whether finished optimizing Model Parameters for this site
 
 ###############################################################################
 ###############################################################################
@@ -150,44 +153,48 @@ figure_1 = ff.flux_plots(concunique, conc_interp_fit_plot, por, por_all,
                          por_fit, bottom_temp, picks, sedtimes, seddepths,
                          Leg, Site, Solute_db, flux, dp, temp_gradient)
 figure_1.show()
+if optimized == 'yes':
+    # Save Figure
+    if flux_fig_path:
+        savefig(flux_fig_path +
+               "interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
 
-# Save Figure
-if flux_fig_path:
-    savefig(flux_fig_path + "interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
+    # Monte Carlo Simulation
+    interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors, conc_fits = ff.monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit)
 
-# Monte Carlo Simulation
-interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors, conc_fits = ff.monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit)
+    # Plot Monte Carlo Distributions
+    mc_figure =ff.monte_carlo_plot(interface_fluxes, median_flux, stdev_flux,
+                                   skewness, p_value, interface_fluxes_log,
+                                   median_flux_log, stdev_flux_log,
+                                   skewness_log, p_value_log)
+    mc_figure.show()
 
-# Plot Monte Carlo Distributions
-mc_figure =ff.monte_carlo_plot(interface_fluxes, median_flux, stdev_flux,
-                               skewness, p_value, interface_fluxes_log,
-                               median_flux_log, stdev_flux_log, skewness_log,
-                               p_value_log)
-mc_figure.show()
+    # Save figure and fluxes from each run
+    if mc_fig_path:
+        savefig(mc_fig_path +
+            "monte carlo_{}_{}_{}.png".format(Solute_db, Leg, Site))
+    if mc_text_path:
+        np.savetxt(mc_text_path +
+            "monte carlo_{}_{}_{}.csv".format(Solute_db, Leg, Site),
+            interface_fluxes, delimiter=",")
 
-# Save figure and fluxes from each run
-if mc_fig_path:
-    savefig(mc_fig_path + "monte carlo_{}_{}_{}.png".format(Solute_db, Leg, Site))
-if mc_text_path:
-    np.savetxt(mc_text_path + "monte carlo_{}_{}_{}.csv".format(Solute_db, Leg, Site), interface_fluxes, delimiter=",")
+    # Retrieve misc metadata
+    Hole = ''.join(filter(str.isupper, filter(str.isalpha, Holes)))
+    Date = datetime.datetime.now()
+    site_key = con.execute("""select site_key
+                    from site_info
+                    where leg = '{}' and site = '{}'
+                    ;""".format(Leg, Site))
+    site_key = site_key.fetchone()[0]
 
-# Retrieve misc metadata
-Hole = ''.join(filter(str.isupper, filter(str.isalpha, Holes)))
-Date = datetime.datetime.now()
-site_key = con.execute("""select site_key
-                from site_info
-                where leg = '{}' and site = '{}'
-                ;""".format(Leg, Site))
-site_key = site_key.fetchone()[0]
-
-# Send metadata to database
-ff.flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
-               burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,
-               r_squared,age_depth_boundaries,sedrate,advection,Precision,Ds,
-               TempD,bottom_temp,bottom_temp_est,cycles,por_error,mean_flux,
-               median_flux,stdev_flux,skewness,p_value,mean_flux_log,
-               median_flux_log,stdev_flux_log,stdev_flux_lower,
-               stdev_flux_upper,skewness_log,p_value_log,runtime_errors,
-               Date,Comments,Complete)
+    # Send metadata to database
+    ff.flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
+                   burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,
+                   r_squared,age_depth_boundaries,sedrate,advection,Precision,Ds,
+                   TempD,bottom_temp,bottom_temp_est,cycles,por_error,mean_flux,
+                   median_flux,stdev_flux,skewness,p_value,mean_flux_log,
+                   median_flux_log,stdev_flux_log,stdev_flux_lower,
+                   stdev_flux_upper,skewness_log,p_value_log,runtime_errors,
+                   Date,Comments,Complete)
 
 # eof
