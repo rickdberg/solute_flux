@@ -41,6 +41,7 @@ from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 from matplotlib import mlab
 from scipy import optimize
 from collections import defaultdict
+import sys
 
 import seawater
 
@@ -89,12 +90,14 @@ def metadata_compiler(engine, metadata, site_info, hole_info, Leg, Site):
     except:
         ran_metadata = pd.DataFrame(sitedata.loc[:,['site_key','leg','site']])
 
-    # Load porosity cutoff depths
+    # Load porosity cutoff depths, if available
     sql = """SELECT *
              FROM porosity_cutoff
              WHERE site = {}
              """.format(Site)
     por_cuts = pd.read_sql(sql, engine)
+    if por_cuts.empty:
+        sys.exit('Run porosity_cutoff.py for site before calculating flux.')
 
     # Combine all tables
     ran_and_site = pd.merge(ran_metadata,
