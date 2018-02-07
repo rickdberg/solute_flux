@@ -69,6 +69,7 @@ import numpy as np
 import datetime
 from pylab import savefig
 import matplotlib.pyplot as plt
+import sys
 
 import flux_functions as ff
 from user_parameters import (engine, conctable, portable, metadata_table,
@@ -112,6 +113,10 @@ site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
                                   hole_info, Leg, Site)
 concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
 # concunique = concunique[1:,:]  # If you don't use bottom water concentration
+
+if not sedtimes.size:
+    sys.exit("Sedimentation Rates not yet calculated for this site."
+        "Use age_depth.py to calculate.")
 
 # Fit pore water concentration curve
 conc_fit = ff.concentration_fit(concunique, dp, line_fit)
@@ -196,5 +201,7 @@ if optimized == 'yes':
                    median_flux_log,stdev_flux_log,stdev_flux_lower,
                    stdev_flux_upper,skewness_log,p_value_log,runtime_errors,
                    Date,Comments,Complete)
-
+    print('Results sent to database')
+else:
+    print('Continue optimization: Results NOT sent to database')
 # eof
