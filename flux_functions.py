@@ -89,12 +89,23 @@ def metadata_compiler(engine, metadata, site_info, hole_info, Leg, Site):
     except:
         ran_metadata = pd.DataFrame(sitedata.loc[:,['site_key','leg','site']])
 
+    # Load porosity cutoff depths
+    sql = """SELECT *
+             FROM porosity_cutoff
+             WHERE site = {}
+             """.format(Site)
+    por_cuts = pd.read_sql(sql, engine)
+
     # Combine all tables
-    site_meta_data = pd.merge(ran_metadata,
+    ran_and_site = pd.merge(ran_metadata,
                               sitedata,
                               how='outer',
                               on=('site_key', 'leg', 'site'))
-    site_metadata = pd.merge(site_meta_data,
+    add_por_cut = pd.merge(ran_and_site,
+                              por_cuts,
+                              how='outer',
+                              on=('site_key', 'site'))
+    site_metadata = pd.merge(add_por_cut,
                              hole_grouped,
                              how='outer',
                              on=('site_key')).fillna(np.nan)
