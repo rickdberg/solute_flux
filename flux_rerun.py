@@ -13,8 +13,8 @@ See flux_functions.py for detailed descriptions of each function used.
 Inputs:
 cycles:         number of monte carlo simulations to run
 line_fit:       "linear" or "exponential" line fit to concentration profile
-Ocean:          concentration of conservative solute in the ocean (mM)
-Solute_db:      solute name for inserting into database
+ocean:          concentration of conservative solute in the ocean (mM)
+solute_db:      solute name for inserting into database
 
 Outputs are the same as interface_flux.py
 Outputs:
@@ -44,7 +44,7 @@ stdev_flux_upper:     lower log-normal value for 1 standard deviation
 skewness_log:         skewness of distribution of log-normal fluxes
 p_value_log:          Kolmogorov-Smirvov p-value of distribution of log-normal fluxes
 runtime_errors:       number of runtime errors resulting from line-fitting procedure
-Date:                 date the site was modeled
+date:                 date the site was modeled
 
 Note: all other ouputs are taken directly from database site information and
 hole information tables.
@@ -66,8 +66,8 @@ cycles = 5000
 line_fit = 'exponential'
 
 # Species parameters
-Ocean = 54
-Solute_db = 'Mg'
+ocean = 54
+solute_db = 'Mg'
 
 ###############################################################################
 ###############################################################################
@@ -81,17 +81,17 @@ metadata = pd.read_sql(sql, engine)
 
 for i in np.arange(np.size(metadata, axis=0))[:]:  # If script errors out on specific site, can type in index here
     cycles = 5000
-    Complete = 'yes'
-    Comments = metadata.comments[i]
-    Leg = metadata.leg[i]
-    Site = metadata.site[i]
-    Holes = "('{}') or hole is null".format('\',\''.join(filter(str.isalpha,
+    complete = 'yes'
+    comments = metadata.comments[i]
+    leg = metadata.leg[i]
+    site = metadata.site[i]
+    holes = "('{}') or hole is null".format('\',\''.join(filter(str.isalpha,
                                                                 metadata.hole[i])))
-    Hole = metadata.hole[i]
-    Solute = metadata.solute[i]
-    Ds = float(metadata.ds[i])
-    TempD = float(metadata.ds_reference_temp[i])
-    Precision = float(metadata.measurement_precision[i])
+    hole = metadata.hole[i]
+    solute = metadata.solute[i]
+    ds = float(metadata.ds[i])
+    temp_d = float(metadata.ds_reference_temp[i])
+    precision = float(metadata.measurement_precision[i])
     dp = int(metadata.datapoints[i])
     z = float(metadata.flux_depth[i])
     runtime_errors = 0
@@ -99,16 +99,16 @@ for i in np.arange(np.size(metadata, axis=0))[:]:  # If script errors out on spe
 
     # Load and prepare all input data
     site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
-                                      hole_info, Leg, Site)
-    concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
+                                      hole_info, leg, site)
+    concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata)
     # concunique = concunique[1:,:]  # If you don't use bottom water concentration
 
     # Fit pore water concentration curve
     try:
         conc_fit = ff.concentration_fit(concunique, dp, line_fit)
     except:
-        print('Failed initial concentration fit, Site', Site)
-        Complete = 'no'
+        print('Failed initial concentration fit: Site', site)
+        complete = 'no'
         continue
     conc_interp_fit_plot = (
         ff.conc_curve(line_fit)(np.linspace(concunique[0,0],
@@ -127,8 +127,8 @@ for i in np.arange(np.size(metadata, axis=0))[:]:  # If script errors out on spe
     try:
         por_fit = ff.porosity_fit(por)
     except:
-        print('Failed initial porosity fit, Site', Site)
-        Complete = 'no'
+        print('Failed initial porosity fit: Site', site)
+        complete = 'no'
         continue
     por_error = ff.rmse(ff.por_curve(por[:,0], por, por_fit), por[:,1])
 
@@ -137,32 +137,32 @@ for i in np.arange(np.size(metadata, axis=0))[:]:  # If script errors out on spe
     tortuosity = 1-np.log(porosity**2)
 
     # Calculate effective diffusion coefficient
-    D_in_situ = ff.d_stp(TempD, bottom_temp, Ds)
-    Dsed = D_in_situ/tortuosity  # Effective diffusion coefficient
+    d_in_situ = ff.d_stp(temp_d, bottom_temp, ds)
+    dsed = d_in_situ/tortuosity  # Effective diffusion coefficient
 
     # Calculate pore water burial flux rate
     pwburialflux = ff.pw_burial(seddepths, sedtimes, por_fit, por)
 
     # Calculate solute flux
     flux, burial_flux, gradient = ff.flux_model(conc_fit, concunique, z,
-                                                pwburialflux, porosity, Dsed,
-                                                advection, dp, Site, line_fit)
+                                                pwburialflux, porosity, dsed,
+                                                advection, dp, site, line_fit)
 
     # Plot input data
     plt.ioff()
     figure_1 = ff.flux_plots(concunique, conc_interp_fit_plot, por, por_all,
                              por_fit, bottom_temp, picks, sedtimes, seddepths,
-                             Leg, Site, Solute_db, flux, dp, temp_gradient)
+                             leg, site, solute_db, flux, dp, temp_gradient)
 
     # Save Figure
     if flux_fig_path:
         savefig(flux_fig_path +
-            "interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
+            "interface_{}_flux_{}_{}.png".format(solute_db, leg, site))
     figure_1.clf()
     plt.close('all')
 
     # Monte Carlo Simulation
-    fluxes_real, fluxes_log_real, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors, conc_fits = ff.monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit)
+    fluxes_real, fluxes_log_real, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors, conc_fits = ff.monte_carlo(cycles, precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, temp_d, bottom_temp, z, advection, leg, site, solute_db, ds, por_error, conc_fit, runtime_errors, line_fit)
 
     # Plot Monte Carlo Distributions
     mc_figure = ff.monte_carlo_plot(fluxes_real, median_flux, stdev_flux,
@@ -173,32 +173,32 @@ for i in np.arange(np.size(metadata, axis=0))[:]:  # If script errors out on spe
     # Save figure and fluxes from each run
     if mc_fig_path:
         savefig(mc_fig_path +
-            "interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
+            "interface_{}_flux_{}_{}.png".format(solute_db, leg, site))
     mc_figure.clf()
     if mc_text_path:
         np.savetxt(mc_text_path +
-            "monte carlo_{}_{}_{}.csv".format(Solute_db, Leg, Site),
+            "monte carlo_{}_{}_{}.csv".format(solute_db, leg, site),
             fluxes_real, delimiter=",")
 
     # Date and time
-    Date = datetime.datetime.now()
+    date = datetime.datetime.now()
 
     # Retrieve Site key
     site_key = con.execute("""select site_key
                     from site_info
                     where leg = '{}' and site = '{}'
-                    ;""".format(Leg, Site))
+                    ;""".format(leg, site))
     site_key = site_key.fetchone()[0]
 
     # Send metadata to database
-    ff.flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
+    ff.flux_to_sql(con, solute_db, site_key,leg,site,hole,solute,flux,
                    burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,
-                   r_squared,age_depth_boundaries,sedrate,advection,Precision,
-                   Ds,TempD,bottom_temp,bottom_temp_est,cycles,por_error,
+                   r_squared,age_depth_boundaries,sedrate,advection,precision,
+                   ds,temp_d,bottom_temp,bottom_temp_est,cycles,por_error,
                    mean_flux,median_flux,stdev_flux,skewness,p_value,
                    mean_flux_log,median_flux_log,stdev_flux_log,
                    stdev_flux_lower,stdev_flux_upper,skewness_log,p_value_log,
-                   runtime_errors,Date,Comments,Complete)
+                   runtime_errors,date,comments,complete)
     print('Cycles:', cycles)
     print('Errors:', runtime_errors)
 
