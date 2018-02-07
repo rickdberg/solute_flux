@@ -32,12 +32,6 @@ Solute_db:      solute name for inserting into database
 z:              depth at which flux is calculated (mbsf)
 line_fit:       "linear" or "exponential" line fit to concentration profile
 dp:             concentration datapoints below seafloor used for line fit
-engine:         SQLAlchemy engine
-conctable:      name of MySQL solute concentration table
-portable:       name of MySQL porosity (MAD) table
-metadata_table: name of MySQL metadata table
-site_info:      name of MySQL site information table
-hole_info:      name of MySQL hole information table
 
 Outputs:
 flux:                 solute flux at z (mol m^-2 y^-1). Positive flux value is
@@ -60,10 +54,10 @@ hole information tables.
 import numpy as np
 import datetime
 import matplotlib.pyplot as plt
-from sqlalchemy import create_engine
 
 import flux_functions as ff
-from site_metadata_compiler import metadata_compiler
+from user_parameters import (engine, conctable, portable, metadata_table,
+                             site_info, hole_info)
 
 # Site Information
 Leg = '190'
@@ -74,10 +68,10 @@ Complete = 'no'
 
 # Species parameters
 Solute = 'Mg'  # Change X to X_ic if needed, based on availability in database
-Ds = 1.875*10**-2  # m^2 per year (Li & Gregory 1971)
+Ds = 1.875*10**-2  # m^2 per year
 TempD = 18  # degrees C
 Precision = 0.02
-Ocean = 54  # mM
+Ocean = 54
 Solute_db = 'Mg'
 
 # Model parameters
@@ -85,21 +79,13 @@ z = 0
 line_fit = 'exponential'
 dp = 8
 
-# Connect to database
-engine = create_engine("mysql://root:neogene227@localhost/iodp_compiled")
-conctable = 'iw_all'
-portable = 'mad_all'
-metadata_table = "metadata_mg_flux"
-site_info = "site_info"
-hole_info = "summary_all"
-
 ###############################################################################
 ###############################################################################
 con = engine.connect()
 plt.close('all')
 
 # Load and prepare all input data
-site_metadata = metadata_compiler(engine, metadata_table, site_info,
+site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
                                   hole_info, Leg, Site)
 
 # dp = int(site_metadata.datapoints[0])
