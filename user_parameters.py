@@ -11,7 +11,7 @@ porosity_cutoff,
 initial_flux,
 iterface_flux,
 interface_fractionation,
-or flux_rerun.
+and flux_rerun.
 
 Variables:
 engine:         sqlalchemy formatted connection to database
@@ -21,26 +21,28 @@ metadata_table: name of MySQL metadata table for saving results
 site_info:      name of MySQL site information table
 hole_info:      name of MySQL hole information table
 age_table:      name of MySQL age-depth table
-flux_fig_path:  folder path to save flux input data figures
-mc_fig_path:    folder path to save monte carlo distribution figure
-mc_text_path:   folder path to save monte carlo run results matrix
+por_cut_table:  name of porosity cutoff depth table
+flux_fig_path:  Optional folder path to save flux input data figures
+mc_fig_path:    Optional folder path to save monte carlo distribution figure
+mc_text_path:   Optional folder path to save monte carlo run results matrix
 
 
 """
 from sqlalchemy import create_engine
 
-
 # Connect to database
 engine = create_engine("mysql://root:neogene227@localhost/iodp_compiled")
-conctable = 'iw_all'
-portable = 'mad_all'
+conctable = "iw_all"
+portable = "mad_all"
 metadata_table = "metadata_mg_flux"
 site_info = "site_info"
 hole_info = "summary_all"
-age_table = 'age_depth'
+age_table = "age_depth"
+por_cut_table = "porosity_cutoff"
 
-# Folder paths for saving flux input data figure,
-# and monte carlo distribution figure and matrix.
+# Optional: Folder paths for saving flux input data figure, and monte carlo
+# distribution figure and matrix.
+# If not saving to any folder, leave as ""
 flux_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\\"
 mc_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\\"
 mc_text_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\\"
