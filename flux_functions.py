@@ -45,7 +45,7 @@ import sys
 
 import seawater
 
-def metadata_compiler(engine, metadata, site_info, hole_info, Leg, Site):
+def metadata_compiler(engine, metadata, site_info, hole_info, leg, site):
     """
     Combine site information, hole information, and
     existing metadata (if available) for particular drilling sites.
@@ -56,8 +56,8 @@ def metadata_compiler(engine, metadata, site_info, hole_info, Leg, Site):
     metadata:   name of MySQL metadata table
     site_info:  name of MySQL site information table
     hole_info:  name of MySQL hole information table
-    Leg:        drilling leg/expedition number
-    Site:       drilling site number
+    leg:        drilling leg/expedition number
+    site:       drilling site number
 
     Outputs:
     site_metadata: combined table with all available data from metadata,
@@ -67,14 +67,14 @@ def metadata_compiler(engine, metadata, site_info, hole_info, Leg, Site):
     sql = """SELECT *
              FROM {}
              where leg = '{}' and site = '{}';
-             """.format(site_info, Leg, Site)
+             """.format(site_info, leg, site)
     sitedata = pd.read_sql(sql, engine)
 
     # Load hole data
     sql = """SELECT *
              FROM {}
              where leg = '{}' and site = '{}';
-             """.format(hole_info, Leg, Site)
+             """.format(hole_info, leg, site)
     holedata = pd.read_sql(sql, engine)
 
     # Group and average hole data for sites
@@ -85,7 +85,7 @@ def metadata_compiler(engine, metadata, site_info, hole_info, Leg, Site):
         sql = """SELECT *
                  FROM {}
                  where leg = '{}' and site = '{}';
-                 """.format(metadata, Leg, Site)
+                 """.format(metadata, leg, site)
         ran_metadata = pd.read_sql(sql, engine)
     except:
         ran_metadata = pd.DataFrame(sitedata.loc[:,['site_key','leg','site']])
@@ -93,8 +93,8 @@ def metadata_compiler(engine, metadata, site_info, hole_info, Leg, Site):
     # Load porosity cutoff depths, if available
     sql = """SELECT *
              FROM porosity_cutoff
-             WHERE site = {}
-             """.format(Site)
+             WHERE site = '{}'
+             """.format(site)
     por_cuts = pd.read_sql(sql, engine)
     if por_cuts.empty:
         sys.exit('Run porosity_cutoff.py for site before calculating flux.')
@@ -148,7 +148,7 @@ def rmse(model_values, measured_values):
     return np.sqrt(((model_values-measured_values)**2).mean())
 
 
-def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
+def load_and_prep(leg, site, holes, solute, Ocean, engine, conctable,
                     portable, site_metadata):
     """
     Imports data from MySQL database, prepares data for modeling, and ouputs
@@ -156,15 +156,15 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     Units are listed in function comments.
 
     Function inputs:
-    Leg:           Drilling leg/expedition number
-    Site:          Drilling site number
-    Holes:         Drilling hole designations
-    Solute:        Solute name in database
+    leg:           Drilling leg/expedition number
+    site:          Drilling site number
+    holes:         Drilling hole designations
+    solute:        solute name in database
     Ocean:         concentration of conservative solute in the ocean
     engine:        SQLAlchemy engine
     conctable:     Name of MySQL solute concentration table
     portable:      Name of MySQL porosity (MAD) table
-    site_metadata: Site metadata from site_metadata_compiler.py
+    site_metadata: site metadata from site_metadata_compiler.py
 
     Function outputs:
     concunique:           2D array of sample depth and solute concentration
@@ -208,7 +208,7 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
         FROM {}
         where leg = '{}' and site = '{}' and (hole in {})
         and {} is not null and hydrate_affected is null
-        ; """.format(Solute, conctable, Leg, Site, Holes, Solute)
+        ; """.format(solute, conctable, leg, site, holes, solute)
     concdata = pd.read_sql(sql, engine)
     concdata = concdata.sort_values(by='sample_depth')
     concdata = concdata.as_matrix()
@@ -228,7 +228,7 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     where leg = '{}' and site = '{}' and (hole in {})
     and coalesce(method,'C') like '%C%'
     and {} is not null and {} > 0 AND {} < 1 and sample_depth is not null
-    ;""".format(portable, Leg, Site, Holes,'porosity','porosity','porosity'))
+    ;""".format(portable, leg, site, holes,'porosity','porosity','porosity'))
     pordata = pd.read_sql(sql, engine)
     # If not enough data from method C, take all data
     if pordata.iloc[:,1].count() < 40:
@@ -237,7 +237,7 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
             where leg = '{}' and site = '{}' and (hole in {})
             and {} is not null and {} > 0 AND {} < 1
             and sample_depth is not null
-            ;""".format(portable, Leg, Site, Holes,
+            ;""".format(portable, leg, site, holes,
             'porosity', 'porosity', 'porosity')
         pordata_b = pd.read_sql(sql, engine)
         pordata = pd.concat((pordata, pordata_b), axis=0)
@@ -247,7 +247,7 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     sql = """SELECT sedrate_ages, sedrate_depths
         FROM metadata_sed_rate
         where leg = '{}' and site = '{}'
-        ; """.format(Leg, Site)
+        ; """.format(leg, site)
     sedratedata = pd.read_sql(sql, engine)
     sedratedata = sedratedata.sort_values(by='sedrate_depths')
 
@@ -262,7 +262,7 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     sql = """SELECT depth, age
         FROM age_depth
         where leg = '{}' and site = '{}' order by 1
-        ;""".format(Leg, Site)
+        ;""".format(leg, site)
     picks = pd.read_sql(sql, engine)
     picks = picks.as_matrix()
     picks = picks[np.argsort(picks[:,0])]
@@ -271,7 +271,7 @@ def load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable,
     sql = """SELECT age_depth_boundaries
         FROM metadata_sed_rate
         where leg = '{}' and site = '{}' order by 1
-        ;""".format(Leg, Site)
+        ;""".format(leg, site)
     age_depth_boundaries = pd.read_sql(sql, engine).iloc[0,0]
 
     # Concentration vector after averaging duplicates
@@ -300,35 +300,35 @@ def sedtemp(z, bottom_temp, temp_gradient):
         return bottom_temp + np.multiply(z, temp_gradient)
 
 
-def d_stp(Td, T, Ds):
+def d_stp(t_ref, t_in_situ, ds):
     """
     Calculates viscosity from Mostafa H. Sharqawy 12-18-2009,
     MIT (mhamed@mit.edu) (Sharqawy M. H., Lienhard J. H., and Zubair, S. M.,
     Desalination and Water Treatment, 2009)
     Viscosity used as input into Stokes-Einstein equation
 
-    Td:  reference temperature
-    T:   in situ temperature
-    Ds:  Diffusion coefficient at reference temperature
+    t_ref:  reference temperature
+    t_in_situ:   in situ temperature
+    ds:  Diffusion coefficient at reference temperature
     """
     # Viscosity at reference temperature
     muwd = (4.2844324477E-05 +
             1 /
-            (1.5700386464E-01 * (Td + 6.4992620050E+01)**2+-9.1296496657E+01))
-    A = 1.5409136040E+00 + 1.9981117208E-02 * Td + -9.5203865864E-05 * Td**2
-    B = 7.9739318223E+00 + -7.5614568881E-02 * Td + 4.7237011074E-04 * Td**2
+            (1.5700386464E-01 * (t_ref + 6.4992620050E+01)**2+-9.1296496657E+01))
+    A = 1.5409136040E+00 + 1.9981117208E-02 * t_ref + -9.5203865864E-05 * t_ref**2
+    B = 7.9739318223E+00 + -7.5614568881E-02 * t_ref + 4.7237011074E-04 * t_ref**2
     visd = muwd*(1 + A*0.035 + B*0.035**2)
 
     # Viscosity vector
     muw = (4.2844324477E-05 +
            1 /
-           (1.5700386464E-01*(T + 6.4992620050E+01)**2+-9.1296496657E+01))
-    C = 1.5409136040E+00 + 1.9981117208E-02 * T + -9.5203865864E-05 * T**2
-    D = 7.9739318223E+00 + -7.5614568881E-02 * T + 4.7237011074E-04 * T**2
+           (1.5700386464E-01*(t_in_situ + 6.4992620050E+01)**2+-9.1296496657E+01))
+    C = 1.5409136040E+00 + 1.9981117208E-02 * t_in_situ + -9.5203865864E-05 * t_in_situ**2
+    D = 7.9739318223E+00 + -7.5614568881E-02 * t_in_situ + 4.7237011074E-04 * t_in_situ**2
     vis = muw*(1 + C*0.035 + D*0.035**2)
-    T = T + 273.15
-    Td = Td + 273.15
-    return T / vis * visd * Ds / Td  # Stokes-Einstein equation
+    t_in_situ = t_in_situ + 273.15
+    t_ref = t_ref + 273.15
+    return t_in_situ / vis * visd * ds / t_ref  # Stokes-Einstein equation
 
 def rsq(modeled, measured):
     """
@@ -489,8 +489,8 @@ def pw_burial(seddepths, sedtimes, por_fit, por):
     return pwburialflux
 
 
-def flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed,
-                advection, dp, Site, line_fit):
+def flux_model(conc_fit, concunique, z, pwburialflux, porosity, dsed,
+                advection, dp, site, line_fit):
     """
     Solute flux calculation using 1D advection-diffusion model
 
@@ -499,10 +499,10 @@ def flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed,
     z:            depth below seafloor at which flux is determined (m)
     pwburialflux: modern pore water burial rate
     porosity:     porosity at z
-    Dsed:         diffusion coefficient at z
+    dsed:         diffusion coefficient at z
     advection:    advection rate at z
     dp:           concentration datapoints below seafloor used for line fit
-    Site:         drilling site number
+    site:         drilling site number
     line_fit:     "linear" or "exponential", as specified in conc_curve
     """
     if line_fit == 'exponential':
@@ -517,22 +517,22 @@ def flux_model(conc_fit, concunique, z, pwburialflux, porosity, Dsed,
         # Derivative of conc_curve @ z
         gradient = conc_fit[0]
     burial_flux = pwburialflux * conc_curve(line_fit)(z, *conc_fit)
-    flux = (porosity * Dsed * -gradient +
+    flux = (porosity * dsed * -gradient +
             (porosity * advection + pwburialflux)
             * conc_curve(line_fit)(z, *conc_fit))
-    print('Site:', Site, 'Flux (mol/m^2 y^-1):', flux)
+    print('Site:', site, 'Flux (mol/m^2 y^-1):', flux)
     return flux, burial_flux, gradient
 
 
-def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por,
-                por_fit, seddepths, sedtimes, TempD, bottom_temp, z,
-                advection, Leg, Site, Solute_db, Ds, por_error, conc_fit,
+def monte_carlo(cycles, precision, concunique, bottom_temp_est, dp, por,
+                por_fit, seddepths, sedtimes, temp_d, bottom_temp, z,
+                advection, leg, site, solute_db, ds, por_error, conc_fit,
                 runtime_errors, line_fit):
     """
     Monte Carlo simulation of flux_model output to find total error in fluxes
 
     cycles:          number of simulations to run
-    Precision:       relative standard deviation of concentration measurements
+    precision:       relative standard deviation of concentration measurements
     concunique:      2D array of depth and concentration from load_and_prep
     bottom_temp_est: bottom water temperature
     dp:              concentration datapoints below seafloor used for line fit
@@ -542,14 +542,14 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por,
     por_fit:         Athy's Law parameter from porosity_fit function
     seddepths:       sediment accumulation bounds from load_and_prep function
     sedtimes:        sediment accumulation bounds from load_and_prep function
-    TempD:           reference temperature of diffusion coefficient
+    temp_d:           reference temperature of diffusion coefficient
     bottom_temp:     ocean bottom water temperature (C)
     z:               depth at which flux is calculated
     advection:       external advection rate
-    Leg:             drilling leg/expedition number
-    Site:            drilling site number
-    Solute_db:       solute name for inserting into database
-    Ds:              free diffusion coefficient at TempD
+    leg:             drilling leg/expedition number
+    site:            drilling site number
+    solute_db:       solute name for inserting into database
+    ds:              free diffusion coefficient at temp_d
     por_error:       porosity measurement error
     conc_fit:        conc_curve parameter values
     runtime_errors:  number of runtime errors=0
@@ -577,7 +577,7 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por,
     por_rand = por_rand[:cycles,:]
 
     # Concentration offsets - using full gaussian probability
-    relativeerror = Precision
+    relativeerror = precision
     conc_offsets = np.random.normal(scale=relativeerror,
                                     size=(cycles, len(concunique[:dp,1])))
 
@@ -636,11 +636,11 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por,
         pwburialflux = pw_burial(seddepths, sedtimes, por_fit, por)
         pwburialfluxes[n] = pwburialflux
 
-    # Dsed vector
+    # dsed vector
     tortuosity_rand = 1-np.log(portop_rand**2)
     bottom_temp_rand = bottom_temp+temp_offsets
     bottom_temp_rand[bottom_temp_rand < -2] = -2
-    Dsed_rand = d_stp(TempD, bottom_temp_rand, Ds)/tortuosity_rand
+    dsed_rand = d_stp(temp_d, bottom_temp_rand, ds)/tortuosity_rand
 
     """
     Plot all the monte carlo runs
@@ -656,7 +656,7 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por,
     if line_fit == 'exponential':
         gradient = (conc_fits[:,1] * conc_fits[:,0]
                     * np.exp(np.multiply(conc_fits[:,0], z)))
-        interface_fluxes = (portop_rand * Dsed_rand * -gradient
+        interface_fluxes = (portop_rand * dsed_rand * -gradient
                             + (portop_rand * advection + pwburialfluxes)
                             * conc_curve(line_fit)(z,
                                                    conc_fits[:,0],
@@ -664,7 +664,7 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por,
                                                    conc_fits[:,2]))
     elif line_fit == 'linear':
         gradient = conc_fits[:,0]
-        interface_fluxes = (portop_rand * Dsed_rand * -gradient
+        interface_fluxes = (portop_rand * dsed_rand * -gradient
                             + (portop_rand * advection + pwburialfluxes)
                             * conc_curve(line_fit)(z,
                                                    conc_fits[:,0],
@@ -696,18 +696,18 @@ def monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por,
             runtime_errors, conc_fits)
 
 
-def monte_carlo_fract(cycles, Precision, Precision_iso, concunique,
+def monte_carlo_fract(cycles, precision, precision_iso, concunique,
                       bottom_temp_est, dp, por, por_fit, seddepths, sedtimes,
-                      TempD, bottom_temp, z, advection, Leg, Site, Solute_db,
-                      Ds, por_error, conc_fit, runtime_errors, isotopedata,
+                      temp_d, bottom_temp, z, advection, leg, site, solute_db,
+                      ds, por_error, conc_fit, runtime_errors, isotopedata,
                       mg26_24_ocean, line_fit):
     """
     Monte Carlo simulation of flux_model (applied to Mg fractionation) outputs
     to find total error in Mg fractionations.
 
     cycles:          number of simulations to run
-    Precision:       relative standard deviation of concentration measurements
-    Precision_iso:   standard deviation of isotope measurements
+    precision:       relative standard deviation of concentration measurements
+    precision_iso:   standard deviation of isotope measurements
     concunique:      2D array of depth and concentration from load_and_prep
     bottom_temp_est: bottom water temperature
     dp:              concentration datapoints below seafloor used for line fit
@@ -717,17 +717,17 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique,
     por_fit:         Athy's Law parameter from porosity_fit function
     seddepths:       sediment accumulation bounds from load_and_prep function
     sedtimes:        sediment accumulation bounds from load_and_prep function
-    TempD:           reference temperature of diffusion coefficient
+    temp_d:           reference temperature of diffusion coefficient
     bottom_temp:     ocean bottom water temperature (C)
     z:               depth at which flux is calculated
     advection:       external advection rate
-    Leg:             drilling leg/expedition number
-    Site:            drilling site number
-    Solute_db:       solute name for inserting into database
-    Ds:              free diffusion coefficient at TempD
+    leg:             drilling leg/expedition number
+    site:            drilling site number
+    solute_db:       solute name for inserting into database
+    ds:              free diffusion coefficient at temp_d
     por_error:       porosity measurement error
     conc_fit:        conc_curve parameter values
-    runtime_errors:  number of runtime errors=0
+    runtime_errors:  number of runtime errors
     isotopedata:     2D numpy array of depth and isotopic delta values
     mg26_24_ocean:   delta value of the ocean
     line_fit:        "linear" or "exponential", as specified in conc_curve
@@ -752,7 +752,7 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique,
     por_rand = por_rand[:cycles,:]
 
     # Concentration offsets - using full gaussian probability
-    # relativeerror = Precision
+    # relativeerror = precision
     # conc_offsets = np.random.normal(scale=relativeerror,
     #                                 size=(cycles, len(isotopedata[:, 3])))
     # Get randomized concentration matrix (within realistic ranges)
@@ -761,8 +761,8 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique,
     # conc_rand[conc_rand < 0] = 0
 
     # Isotopic ratio (in delta notation) offsets - full gaussian probability
-    delta_offsets = Precision_iso[:,None]*np.random.normal(scale=1,
-                                            size=(len(Precision_iso), cycles))
+    delta_offsets = precision_iso[:,None]*np.random.normal(scale=1,
+                                            size=(len(precision_iso), cycles))
 
     # Calculate randomized Mg isotope concentration profiles
     # Decimal numbers are isotopic ratios of standards.
@@ -819,7 +819,7 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique,
     tortuosity_rand = 1-np.log(portop_rand**2)
     bottom_temp_rand = bottom_temp+temp_offsets
     bottom_temp_rand[bottom_temp_rand < -2] = -2
-    Dsed_rand = d_stp(TempD, bottom_temp_rand, Ds)/tortuosity_rand
+    dsed_rand = d_stp(temp_d, bottom_temp_rand, ds)/tortuosity_rand
 
     """
     Plot all the monte carlo runs
@@ -838,7 +838,7 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique,
             gradient = (conc_fits[:,1,i] *
                         conc_fits[:,0,i] *
                         np.exp(np.multiply(conc_fits[:,0,i], z)))
-            interface_fluxes = (portop_rand * Dsed_rand * -gradient +
+            interface_fluxes = (portop_rand * dsed_rand * -gradient +
                                (portop_rand * advection + pwburialfluxes) *
                                conc_curve(line_fit)(z,
                                                     conc_fits[:,0,i],
@@ -846,7 +846,7 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique,
                                                     conc_fits[:,2,i]))
         elif line_fit == 'linear':
             gradient = conc_fits[:,0,i]
-            interface_fluxes = (portop_rand * Dsed_rand * -gradient +
+            interface_fluxes = (portop_rand * dsed_rand * -gradient +
                                (portop_rand * advection + pwburialfluxes) *
                                conc_curve(line_fit)(z,
                                                     conc_fits[:,0,i],
@@ -867,7 +867,7 @@ def monte_carlo_fract(cycles, Precision, Precision_iso, concunique,
 
 
 def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit,
-               bottom_temp, picks, sedtimes, seddepths, Leg, Site, Solute_db,
+               bottom_temp, picks, sedtimes, seddepths, leg, site, solute_db,
                flux, dp, temp_gradient):
     """
     Plot the input data and line fits used in the flux_model.
@@ -883,9 +883,9 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit,
     picks:             biostratigraphic age-depth data
     seddepths:         sediment accumulation bounds from load_and_prep function
     sedtimes:          sediment accumulation bounds from load_and_prep function
-    Leg:               drilling leg/expedition number
-    Site:              drilling site number
-    Solute_db:         solute name for inserting into database
+    leg:               drilling leg/expedition number
+    site:              drilling site number
+    solute_db:         solute name for inserting into database
     flux:              solute flux calculated at this site (mol m^-2 y^-1)
     dp:                datapoints used for solute concentration curve fit
     temp_gradient:     geothermal gradient (C/m)
@@ -909,7 +909,7 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit,
     # Figure title
     figure_1.suptitle(
         r"$Expedition\ {},\ Site\ {}\ \ \ \ \ \ \ \ \ \ {}\ flux={}\ mol/m^2y$"
-        .format(Leg, Site, Solute_db, round(flux,4)), fontsize=20)
+        .format(leg, site, solute_db, round(flux,4)), fontsize=20)
 
     # Plot input data
     ax1.plot(concunique[:,1],
@@ -966,7 +966,7 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit,
     ax2.legend(loc='best', fontsize='small')
     ax3.legend(loc='best', fontsize='small')
     ax1.set_ylabel('$Depth\ (mbsf)$', fontsize=18)
-    ax1.set_xlabel('${}\ (mM)$'.format(Solute_db), fontsize=18)
+    ax1.set_xlabel('${}\ (mM)$'.format(solute_db), fontsize=18)
     ax2.set_xlabel('$Porosity$', fontsize=18)
     ax3.set_xlabel('$Age\ (Ma)$', fontsize=18)
     #ax4.set_xlabel('Temperature (\u00b0C)')
@@ -1077,26 +1077,26 @@ def monte_carlo_plot(fluxes_real, mean_flux, stdev_flux, skewness,
     return mc_figure
 
 
-def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
+def flux_to_sql(con, solute_db, site_key,leg,site,hole,solute,flux,
                  burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,
-                 r_squared,age_depth_boundaries,sedrate,advection,Precision,Ds,
-                 TempD,bottom_temp,bottom_temp_est,cycles,por_error,mean_flux,
+                 r_squared,age_depth_boundaries,sedrate,advection,precision,ds,
+                 temp_d,bottom_temp,bottom_temp_est,cycles,por_error,mean_flux,
                  median_flux,stdev_flux,skewness,p_value,mean_flux_log,
                  median_flux_log,stdev_flux_log,stdev_flux_lower,
-                 stdev_flux_upper,skewness_log,p_value_log,runtime_errors,Date,
-                 Comments,Complete):
+                 stdev_flux_upper,skewness_log,p_value_log,runtime_errors,date,
+                 comments,complete):
     """
     Send the output of interface_flux.py or flux_rerun.py to the
     MySQL database. If data for a particular site already exists, replaces
     old data with new data.
 
     con:              database engine connection
-    Solute_db:        solute name for inserting into database
+    solute_db:        solute name for inserting into database
     site_key:         MySQL database site key
-    Leg:              drilling leg/expedition number
-    Site:             drilling site number
-    Hole:             drilling hole IDs
-    Solute:           solute name in database
+    leg:              drilling leg/expedition number
+    site:             drilling site number
+    hole:             drilling hole Ids
+    solute:           solute name in database
     flux:             solute flux at z (mol m^-2 y^-1). Positive flux value is
                       downward (into the sediment)
     burial_flux:      solute flux due to pore water burial at z (mol m^-2 y^-1)
@@ -1110,9 +1110,9 @@ def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
     age_depth_boundaries: bounds between discrete sedimentation rate regimes
     sedrate:          modern sediment accumulation rate (solid volume per year)
     advection:        external advection rate (m/y)
-    Precision:        relative standard deviation of concentration measurements
-    Ds:               diffusion coefficient at reference temperature (m^2 y^-1)
-    TempD:            reference temperature of diffusion coefficient (C)
+    precision:        relative standard deviation of concentration measurements
+    ds:               diffusion coefficient at reference temperature (m^2 y^-1)
+    temp_d:            reference temperature of diffusion coefficient (C)
     bottom_temp:      ocean bottom water temperature (C)
     bottom_temp_est:  ocean bottom water temperature parameter for estimation
     cycles:           number of monte carlo simulations to run
@@ -1130,9 +1130,9 @@ def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
     skewness_log:     skewness of distribution of log-normal fluxes
     p_value_log:      Kolmogorov-Smirvov p-value of log-normal fluxes
     runtime_errors:   number of errors from line-fitting procedure
-    Date:             date the site was modeled
-    Complete:         if "yes", modeling is complete for this site
-    Comments:         comments for this location or dataset
+    date:             date the site was modeled
+    complete:         if "yes", modeling is complete for this site
+    comments:         comments for this location or dataset
     """
 
     # Send metadata to database
@@ -1166,44 +1166,44 @@ def flux_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
             median_flux_log={}, stdev_flux_log={}, stdev_flux_lower={},
             stdev_flux_upper={}, skewness_log={}, p_value_log={},
             runtime_errors={}, run_date='{}', comments='{}', complete='{}'
-            ;""".format(Solute_db, site_key,Leg,Site,Hole,Solute,
+            ;""".format(solute_db, site_key,leg,site,hole,solute,
                         flux,burial_flux,gradient,porosity,
                         z,dp,bottom_conc,conc_fit,r_squared,
                         age_depth_boundaries,sedrate,advection,
-                        Precision,Ds,TempD,bottom_temp,bottom_temp_est,cycles,
+                        precision,ds,temp_d,bottom_temp,bottom_temp_est,cycles,
                         por_error,mean_flux,median_flux,stdev_flux,skewness,
                         p_value,mean_flux_log,median_flux_log,stdev_flux_log,
                         stdev_flux_lower,stdev_flux_upper,skewness_log,
-                        p_value_log,runtime_errors,Date,Comments,Complete,
-                        Hole,Solute,flux,burial_flux,gradient,porosity,
+                        p_value_log,runtime_errors,date,comments,complete,
+                        hole,solute,flux,burial_flux,gradient,porosity,
                         z,dp,bottom_conc,conc_fit,r_squared,
-                        age_depth_boundaries,sedrate,advection,Precision,Ds,
-                        TempD,bottom_temp,bottom_temp_est,cycles,
+                        age_depth_boundaries,sedrate,advection,precision,ds,
+                        temp_d,bottom_temp,bottom_temp_est,cycles,
                         por_error,mean_flux,median_flux,stdev_flux,
                         skewness,p_value,mean_flux_log,median_flux_log,
                         stdev_flux_log,stdev_flux_lower,stdev_flux_upper,
-                        skewness_log,p_value_log,runtime_errors,Date,Comments,
-                        Complete)
+                        skewness_log,p_value_log,runtime_errors,date,comments,
+                        complete)
     con.execute(sql)
 
 
-def flux_only_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
+def flux_only_to_sql(con, solute_db, site_key,leg,site,hole,solute,flux,
                        burial_flux,gradient,porosity,z,dp,bottom_conc,conc_fit,
                        r_squared,age_depth_boundaries,sedrate,advection,
-                       Precision,Ds,TempD,bottom_temp,bottom_temp_est,Date,
-                       Comments,Complete):
+                       precision,ds,temp_d,bottom_temp,bottom_temp_est,date,
+                       comments,complete):
     """
     Send the output of initial_flux.py to the MySQL database. Does not include
     any data from Monte Carlo simulation. If data for a particular site
     already exists, replaces old data with new data.
 
         con:              database engine connection
-    Solute_db:        solute name for inserting into database
+    solute_db:        solute name for inserting into database
     site_key:         MySQL database site key
-    Leg:              drilling leg/expedition number
-    Site:             drilling site number
-    Hole:             drilling hole IDs
-    Solute:           solute name in database
+    leg:              drilling leg/expedition number
+    site:             drilling site number
+    hole:             drilling hole IDs
+    solute:           solute name in database
     flux:             solute flux at z (mol m^-2 y^-1). Positive flux value is
                       downward (into the sediment)
     burial_flux:      solute flux due to pore water burial at z (mol m^-2 y^-1)
@@ -1217,14 +1217,14 @@ def flux_only_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
     age_depth_boundaries: bounds between discrete sedimentation rate regimes
     sedrate:          modern sediment accumulation rate (solid volume per year)
     advection:        external advection rate (m/y)
-    Precision:        relative standard deviation of concentration measurements
-    Ds:               diffusion coefficient at reference temperature (m^2 y^-1)
-    TempD:            reference temperature of diffusion coefficient (C)
+    precision:        relative standard deviation of concentration measurements
+    ds:               diffusion coefficient at reference temperature (m^2 y^-1)
+    temp_d:            reference temperature of diffusion coefficient (C)
     bottom_temp:      ocean bottom water temperature (C)
     bottom_temp_est:  ocean bottom water temperature parameter for estimation
-    Date:             date the site was modeled
-    Complete:         if "yes", modeling is complete for this site
-    Comments:         comments for this location or dataset
+    date:             date the site was modeled
+    complete:         if "yes", modeling is complete for this site
+    comments:         comments for this location or dataset
     """
 
     # Send metadata to database
@@ -1246,16 +1246,17 @@ def flux_only_to_sql(con, Solute_db, site_key,Leg,Site,Hole,Solute,flux,
             measurement_precision={}, ds={}, ds_reference_temp={},
             bottom_temp={}, bottom_temp_est='{}', run_date='{}',
             comments='{}', complete='{}'
-            ;""".format(Solute_db, site_key,Leg,Site,Hole,Solute,
+            ;""".format(solute_db, site_key,leg,site,hole,solute,
                         flux,burial_flux,gradient,porosity,z,dp,bottom_conc,
                         conc_fit,r_squared,age_depth_boundaries,sedrate,
-                        advection, Precision,Ds,TempD,bottom_temp,
-                        bottom_temp_est,Date,Comments,Complete,
-                        Hole,Solute,flux,burial_flux,gradient,porosity,
+                        advection, precision,ds,temp_d,bottom_temp,
+                        bottom_temp_est,date,comments,complete,
+                        hole,solute,flux,burial_flux,gradient,porosity,
                         z,dp,bottom_conc,conc_fit,r_squared,
                         age_depth_boundaries,sedrate,advection,
-                        Precision,Ds,TempD,bottom_temp,bottom_temp_est,
-                        Date,Comments,Complete)
+                        precision,ds,temp_d,bottom_temp,bottom_temp_est,
+                        date,comments,complete)
     con.execute(sql)
+
 
 # eof
