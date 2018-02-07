@@ -69,7 +69,6 @@ from pylab import savefig
 import matplotlib.pyplot as plt
 
 import flux_functions as ff
-from site_metadata_compiler import metadata_compiler
 from user_parameters import (engine, conctable, portable, metadata_table,
                              site_info, hole_info, flux_fig_path, mc_fig_path,
                              mc_text_path)
@@ -106,7 +105,7 @@ runtime_errors = 0
 plt.close('all')
 
 # Load and prepare all input data
-site_metadata = metadata_compiler(engine, metadata_table, site_info,
+site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
                                   hole_info, Leg, Site)
 concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
 # concunique = concunique[1:,:]  # If you don't use bottom water concentration
