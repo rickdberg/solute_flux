@@ -155,8 +155,9 @@ for i in np.arange(np.size(metadata, axis=0))[:]:  # If script errors out on spe
                              Leg, Site, Solute_db, flux, dp, temp_gradient)
 
     # Save Figure
-    savefig(flux_fig_path +
-        "interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
+    if flux_fig_path:
+        savefig(flux_fig_path +
+            "interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
     figure_1.clf()
     plt.close('all')
 
@@ -170,12 +171,14 @@ for i in np.arange(np.size(metadata, axis=0))[:]:  # If script errors out on spe
                                     skewness_log, p_value_log)
 
     # Save figure and fluxes from each run
-    savefig(mc_fig_path +
-        "interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
+    if mc_fig_path:
+        savefig(mc_fig_path +
+            "interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
     mc_figure.clf()
-    np.savetxt(mc_text_path +
-        "monte carlo_{}_{}_{}.csv".format(Solute_db, Leg, Site),
-        fluxes_real, delimiter=",")
+    if mc_text_path:
+        np.savetxt(mc_text_path +
+            "monte carlo_{}_{}_{}.csv".format(Solute_db, Leg, Site),
+            fluxes_real, delimiter=",")
 
     # Date and time
     Date = datetime.datetime.now()
