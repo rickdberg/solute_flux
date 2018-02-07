@@ -64,7 +64,6 @@ Leg = '190'
 Site = '1178'
 Holes = "('A','B') or hole is null"
 Comments = ''
-Complete = 'no'
 
 # Species parameters
 Solute = 'Mg'  # Change X to X_ic if needed, based on availability in database
@@ -81,6 +80,7 @@ dp = 8
 
 ###############################################################################
 ###############################################################################
+Complete = 'no'
 con = engine.connect()
 plt.close('all')
 
