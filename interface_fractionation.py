@@ -52,6 +52,7 @@ import pandas as pd
 import datetime
 from pylab import savefig
 import matplotlib.pyplot as plt
+import sys
 
 import flux_functions as ff
 from user_parameters import (engine, conctable, portable, metadata_table,
@@ -96,6 +97,10 @@ concunique = pd.DataFrame(concunique)
 concunique.columns = ['sample_depth', 'mg_conc']
 if top_boundary != 'seawater':
     concunique.iloc[0,1] = concunique.iloc[1,1]
+
+if not sedtimes.size:
+    sys.exit("Sedimentation Rates not yet calculated for this site."
+        "Use age_depth.py to calculate.")
 
 # Mg isotope data, combined with corresponding Mg concentrations
 sql = """select sample_depth, d26mg, d25mg, d26mg_2sd
