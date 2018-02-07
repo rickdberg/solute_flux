@@ -95,9 +95,9 @@ site_key = con.execute("""select site_key
 site_key = site_key.fetchone()[0]
 
 # Send metadata to database
-sql= """insert into porosity_cutoff (site_key,site,por_cutoff_depth)
+sql= """insert into porosity_cutoff (site_key,site,por_cutoff)
                    VALUES ({0}, '{1}', {2})
-                   ON DUPLICATE KEY UPDATE por_cutoff_depth={2}
+                   ON DUPLICATE KEY UPDATE por_cutoff={2}
                    ;""".format(site_key,Site,por_cutoff_depth)
 con.execute(sql)
 
