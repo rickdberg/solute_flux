@@ -28,9 +28,8 @@ line_fit:       "linear" or "exponential" line fit to concentration profile
 dp:             concentration datapoints below seafloor used for line fit
 optimized:      'yes' or 'no', whether model parameters and ready to run monte
                 carlo simulation and save output to database for this site
-
-In addition, filepaths to directories where the figures and output data are to
-be stored need to be specified in the script.
+top_seawater:   'yes' or 'no', whether to use ocean bottom water concentration
+                 as a value at z=0
 
 Outputs:
 flux:                 solute flux at z (mol m^-2 y^-1). Positive flux value is
@@ -100,6 +99,7 @@ cycles = 5000
 line_fit = 'exponential'
 dp = 8
 optimized = 'yes'  # whether finished optimizing Model Parameters for this site
+top_seawater = 'yes'  # whether to use ocean bottom water as top boundary
 
 ###############################################################################
 ###############################################################################
@@ -112,7 +112,8 @@ plt.close('all')
 site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
                                   hole_info, leg, site)
 concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata)
-# concunique = concunique[1:,:]  # If you don't use bottom water concentration
+if top_seawater != 'yes':
+    concunique = concunique[1:,:]
 
 if not sedtimes.size:
     sys.exit("Sedimentation Rates not yet calculated for this site."

@@ -34,9 +34,6 @@ metadata_table: name of MySQL metadata table, same as regular flux metadata
 site_info:      name of MySQL site information table
 hole_info:      name of MySQL hole information table
 
-In addition, filepaths to directories where the figures and output data are to
-be stored need to be specified in the script.
-
 Outputs:
 alpha:        fractionation factor from ocean to sediment column
 alpha_mean:   average of fractionation factors from monte carlo simulation

@@ -64,6 +64,7 @@ from user_parameters import (engine, conctable, portable, metadata_table,
 # Simulation parameters
 cycles = 5000
 line_fit = 'exponential'
+top_seawater = 'yes'  # whether to use ocean bottom water as top boundary
 
 # Species parameters
 ocean = 54
@@ -101,7 +102,8 @@ for i in np.arange(np.size(metadata, axis=0))[:]:  # If script errors out on spe
     site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
                                       hole_info, leg, site)
     concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata)
-    # concunique = concunique[1:,:]  # If you don't use bottom water concentration
+    if top_seawater != 'yes':
+        concunique = concunique[1:,:]
 
     # Fit pore water concentration curve
     try:
