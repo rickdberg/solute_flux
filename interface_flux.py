@@ -20,7 +20,7 @@ Solute:         solute name in database
 Ds:             diffusion coefficient at reference temperature (m^2 y^-1)
 TempD:          reference temperature of diffusion coefficient (C)
 Precision:      relative standard deviation of concentration measurements
-Ocean:          concentration of conservative solute in the ocean (mM)
+Ocean:          concentration of conservative solute in the ocean (millimolar)
 Solute_db:      solute name for inserting into database
 z:              depth at which flux is calculated (mbsf)
 cycles:         number of monte carlo simulations to run
