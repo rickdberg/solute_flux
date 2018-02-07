@@ -152,7 +152,8 @@ figure_1 = ff.flux_plots(concunique, conc_interp_fit_plot, por, por_all,
 figure_1.show()
 
 # Save Figure
-savefig(flux_fig_path + "interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
+if flux_fig_path:
+    savefig(flux_fig_path + "interface_{}_flux_{}_{}.png".format(Solute_db, Leg, Site))
 
 # Monte Carlo Simulation
 interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors, conc_fits = ff.monte_carlo(cycles, Precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, TempD, bottom_temp, z, advection, Leg, Site, Solute_db, Ds, por_error, conc_fit, runtime_errors, line_fit)
@@ -165,8 +166,10 @@ mc_figure =ff.monte_carlo_plot(interface_fluxes, median_flux, stdev_flux,
 mc_figure.show()
 
 # Save figure and fluxes from each run
-savefig(mc_fig_path + "monte carlo_{}_{}_{}.png".format(Solute_db, Leg, Site))
-np.savetxt(mc_text_path + "monte carlo_{}_{}_{}.csv".format(Solute_db, Leg, Site), interface_fluxes, delimiter=",")
+if mc_fig_path:
+    savefig(mc_fig_path + "monte carlo_{}_{}_{}.png".format(Solute_db, Leg, Site))
+if mc_text_path:
+    np.savetxt(mc_text_path + "monte carlo_{}_{}_{}.csv".format(Solute_db, Leg, Site), interface_fluxes, delimiter=",")
 
 # Retrieve misc metadata
 Hole = ''.join(filter(str.isupper, filter(str.isalpha, Holes)))
