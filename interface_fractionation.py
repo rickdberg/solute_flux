@@ -27,12 +27,8 @@ line_fit:       "linear" or "exponential" line fit to concentration profile
 top_boundary:   designate 'seawater' to use "ocean" value, otherwise uses the
                 shallowest pore water measurement value for the upper boundary
 dp:             concentration datapoints below seafloor used for line fit
-engine:         SQLAlchemy engine
-conctable:      name of MySQL solute concentration table
-portable:       name of MySQL porosity (MAD) table
-metadata_table: name of MySQL metadata table, same as regular flux metadata
-site_info:      name of MySQL site information table
-hole_info:      name of MySQL hole information table
+top_seawater:   'yes' or 'no', whether to use ocean bottom water concentration
+                 as a value at z=0
 
 Outputs:
 alpha:        fractionation factor from ocean to sediment column
@@ -72,7 +68,7 @@ ct_d25 = -0.43
 z = 0
 cycles = 5000
 line_fit = 'exponential'
-top_boundary = 'seawater'
+top_seawater = 'yes'  # whether to use ocean bottom water as top boundary
 dp = 4
 
 ###############################################################################
@@ -88,8 +84,6 @@ site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
 concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata)
 concunique = pd.DataFrame(concunique)
 concunique.columns = ['sample_depth', 'mg_conc']
-if top_boundary != 'seawater':
-    concunique.iloc[0,1] = concunique.iloc[1,1]
 
 if not sedtimes.size:
     sys.exit("Sedimentation Rates not yet calculated for this site."
@@ -125,20 +119,18 @@ isotopedata = pd.DataFrame(np.concatenate((isotopedata_26,
                                           axis=1),
                            columns=['sample_depth', 'd26Mg', 'd25Mg'])
 
-#concunique_mg = concunique_mg.reset_index(drop=True)
-#concunique_mg.index = concunique_mg.index - 1
 isotopedata = pd.merge(isotopedata,
                        concunique,
                        how='left',
                        on='sample_depth')
-concunique_mg = concunique.reset_index(drop=True)
 isotopedata = isotopedata.as_matrix()
 
 # Optionally use bottom water as upper bound (dirichlet)
 ct_d26 = [ct_d26]
 ct_d25 = [ct_d25]
 mg26_24_ocean = ((ct_d26[0]/1000)+1)*0.13979
-if top_boundary == 'seawater':
+if top_seawater == 'yes':
+    concunique_mg = concunique.reset_index(drop=True)
     isotopedata = np.concatenate((np.array(([0],
                                             ct_d26,
                                             ct_d25,
@@ -150,6 +142,8 @@ if top_boundary == 'seawater':
         0.5 * np.append([0.05],
                         isotopedata_26_2sd[:,1][~np.isnan(isotopedata_26_2sd[:,1])]))
     precision_iso = isotopedata_26_1sd
+else:
+    concunique.iloc[0,1] = concunique.iloc[1,1]
 
 # Calculate Mg isotope concentrations
 # Decimal numbers are isotopic ratios of standards.
