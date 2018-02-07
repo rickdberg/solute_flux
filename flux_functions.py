@@ -6,7 +6,7 @@ Author: Rick Berg, University of Washington School of Oceanography, Seattle WA
 Module for calculating flux of solutes into/out of sediments.
 
 Functions:
-metadata_compiler:   Compiler function to get all available site metadata
+metadata_compiler:   compile all available site metadata
 averages:            average duplicate samples, grouped by depth
 rmse:                calculate root mean squared error
 load_and_prep:       load data
@@ -25,7 +25,7 @@ monte_carlo_fract:   monte carlo simulation for error of isotopic fractionation
 flux_plots:          plot flux_model inputs
 monte_carlo_plot:    plot monte carlo simulation distributions
 flux_to_sql:         send results to mysql database
-flux_only_to_sql:    send limited dataset to mysql database
+flux_only_to_sql:    Deprecated. send limited dataset to mysql database
 
 """
 
@@ -1193,9 +1193,13 @@ def flux_only_to_sql(con, solute_db, site_key,leg,site,hole,solute,flux,
                        precision,ds,temp_d,bottom_temp,bottom_temp_est,date,
                        comments,complete):
     """
-    Send the output of initial_flux.py to the MySQL database. Does not include
-    any data from Monte Carlo simulation. If data for a particular site
-    already exists, replaces old data with new data.
+    ***Deprecated. initial_flux.py no longer used. Instead, can now select
+    'yes' or 'no' on optimization variable in interface_flux.py to bypass
+    Monte Carlo run.***
+
+    Send the output of initial_flux.py to the MySQL database.
+    Does not include any data from Monte Carlo simulation. If data for a
+    particular site already exists, replaces old data with new data.
 
         con:              database engine connection
     solute_db:        solute name for inserting into database
