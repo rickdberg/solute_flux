@@ -9,13 +9,12 @@ modules that calculate fluxes of solutes. This allows a better
 compaction curve fit and subsequently better pore water burial flux estimate.
 
 Inputs:
-Leg:              drilling leg/expedition number
-Site:             drilling site number
-Holes:            drilling hole IDs
+leg:              drilling leg/expedition number
+site:             drilling site number
+holes:            drilling hole IDs
 por_cutoff_depth: bottom boundary of compaction regime (mbsf)
-Ocean:            concentration of conservative solute in the ocean (mM)
-Solute_db:        solute name for inserting into database
-Solute:           solute name in database
+ocean:            concentration of conservative solute in the ocean (mM)
+solute:           solute name in database
 
 Outputs:
 por_cutoff_depth: bottom boundary of compaction regime (mbsf)
@@ -31,15 +30,14 @@ from user_parameters import (engine, conctable, portable, metadata_table,
                              site_info, hole_info)
 
 # Site information
-Leg = '315'
-Site = 'C0001'
-Holes = "('E','F','H') or hole is null"
+leg = '315'
+site = 'C0001'
+holes = "('E','F','H') or hole is null"
 por_cutoff_depth = 195  # Integer depth, otherwise np.nan
 
 # Species parameters
-Solute = 'Mg'
-Ocean = 54
-Solute_db = 'Mg'
+solute = 'Mg'
+ocean = 54
 
 ###############################################################################
 ###############################################################################
@@ -47,8 +45,8 @@ con = engine.connect()
 
 # Load site data
 site_metadata = metadata_compiler(engine, metadata_table, site_info,
-                                  hole_info, Leg, Site)
-concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
+                                  hole_info, leg, site)
+concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata)
 
 # Average duplicates and apply porosity cutoff depth
 por = ff.averages(pordata[:, 0],
@@ -69,7 +67,7 @@ figure_1, (ax1) = plt.subplots(1, 1, figsize=(4, 7))
 grid = gridspec.GridSpec(3, 8, wspace=0.7)
 ax1 = plt.subplot(grid[0:3, :8])
 ax1.grid()
-figure_1.suptitle(r"$Expedition\ {0},\ Site\ {1}$".format(Leg, Site),
+figure_1.suptitle(r"$Expedition\ {0},\ Site\ {1}$".format(leg, site),
                   fontsize=20)
 ax1.plot(por_all[:, 1],
          por_all[:, 0],
@@ -91,14 +89,14 @@ figure_1.show()
 site_key = con.execute("""select site_key
                 from site_info
                 where leg = '{0}' and site = '{1}'
-                ;""".format(Leg, Site))
+                ;""".format(leg, site))
 site_key = site_key.fetchone()[0]
 
 # Send metadata to database
 sql= """insert into porosity_cutoff (site_key,site,por_cutoff)
                    VALUES ({0}, '{1}', {2})
                    ON DUPLICATE KEY UPDATE por_cutoff={2}
-                   ;""".format(site_key,Site,por_cutoff_depth)
+                   ;""".format(site_key,site,por_cutoff_depth)
 con.execute(sql)
 
 # eof
