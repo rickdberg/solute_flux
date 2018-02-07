@@ -68,8 +68,8 @@ temp_d = 18  # degrees C
 precision = 0.02
 ocean = 54  # mM
 solute_db = 'Mg'
-ct_d26 = [-0.82]
-ct_d25 = [-0.41]
+ct_d26 = -0.83
+ct_d25 = -0.43
 
 # Model parameters
 z = 0
@@ -120,12 +120,7 @@ isotopedata_25 = ff.averages(isotopedata['sample_depth'],
                                         isotopedata.iloc[:, 2])
 isotopedata_26_2sd = ff.averages(isotopedata['sample_depth'],
                                         isotopedata.iloc[:, 3])
-
-# Standard deviation of seawater value of 0.025
-isotopedata_26_1sd = (
-    0.5 * np.append([0.05],
-                    isotopedata_26_2sd[:,1][~np.isnan(isotopedata_26_2sd[:,1])]))
-precision_iso = isotopedata_26_1sd
+precision_iso = isotopedata_26_2sd[:,1]
 isotopedata_26 = pd.DataFrame(isotopedata_26)
 isotopedata_25 = pd.DataFrame(isotopedata_25)
 isotopedata = pd.DataFrame(np.concatenate((isotopedata_26,
@@ -143,6 +138,8 @@ concunique_mg = concunique.reset_index(drop=True)
 isotopedata = isotopedata.as_matrix()
 
 # Optionally use bottom water as upper bound (dirichlet)
+ct_d26 = [ct_d26]
+ct_d25 = [ct_d25]
 mg26_24_ocean = ((ct_d26[0]/1000)+1)*0.13979
 if top_boundary == 'seawater':
     isotopedata = np.concatenate((np.array(([0],
@@ -151,6 +148,11 @@ if top_boundary == 'seawater':
                                             [concunique_mg.iloc[0, 1]])).T,
                                   isotopedata),
                                  axis=0)
+    # Standard deviation of seawater value of 0.025
+    isotopedata_26_1sd = (
+        0.5 * np.append([0.05],
+                        isotopedata_26_2sd[:,1][~np.isnan(isotopedata_26_2sd[:,1])]))
+    precision_iso = isotopedata_26_1sd
 
 # Calculate Mg isotope concentrations
 # Decimal numbers are isotopic ratios of standards.
@@ -224,8 +226,8 @@ mg26_24_flux = fluxes[1]/fluxes[0]
 alpha = mg26_24_flux/mg26_24_ocean
 epsilon = (alpha - 1) * 1000
 
-# Date and time for database
-Date = datetime.datetime.now()
+# date and time for database
+date = datetime.datetime.now()
 
 # Retrieve site key from database
 site_key = con.execute("""select site_key
