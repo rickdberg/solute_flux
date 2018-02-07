@@ -16,12 +16,6 @@ por_cutoff_depth: bottom boundary of compaction regime (mbsf)
 Ocean:            concentration of conservative solute in the ocean (mM)
 Solute_db:        solute name for inserting into database
 Solute:           solute name in database
-engine:           SQLAlchemy engine
-conctable:        name of MySQL solute concentration table
-portable:         name of MySQL porosity (MAD) table
-metadata_table:   name of MySQL metadata table
-site_info:        name of MySQL site information table
-hole_info:        name of MySQL hole information table
 
 Outputs:
 por_cutoff_depth: bottom boundary of compaction regime (mbsf)
@@ -29,11 +23,12 @@ por_cutoff_depth: bottom boundary of compaction regime (mbsf)
 """
 import numpy as np
 import matplotlib.pyplot as plt
-from sqlalchemy import create_engine
 import matplotlib.gridspec as gridspec
 
 import flux_functions as ff
 from site_metadata_compiler import metadata_compiler
+from user_parameters import (engine, conctable, portable, metadata_table,
+                             site_info, hole_info)
 
 # Site information
 Leg = '315'
@@ -45,14 +40,6 @@ por_cutoff_depth = 195  # Integer depth, otherwise np.nan
 Solute = 'Mg'
 Ocean = 54
 Solute_db = 'Mg'
-
-# Connect to database
-engine = create_engine("mysql://root:neogene227@localhost/iodp_compiled")
-conctable = 'iw_all'
-portable = 'mad_all'
-metadata_table = "metadata_mg_flux"
-site_info = "site_info"
-hole_info = "summary_all"
 
 ###############################################################################
 ###############################################################################
@@ -82,7 +69,7 @@ figure_1, (ax1) = plt.subplots(1, 1, figsize=(4, 7))
 grid = gridspec.GridSpec(3, 8, wspace=0.7)
 ax1 = plt.subplot(grid[0:3, :8])
 ax1.grid()
-figure_1.suptitle(r"$Expedition\ {},\ Site\ {}$".format(Leg, Site),
+figure_1.suptitle(r"$Expedition\ {0},\ Site\ {1}$".format(Leg, Site),
                   fontsize=20)
 ax1.plot(por_all[:, 1],
          por_all[:, 0],
@@ -103,16 +90,15 @@ figure_1.show()
 # Retrieve Site key
 site_key = con.execute("""select site_key
                 from site_info
-                where leg = '{}' and site = '{}'
+                where leg = '{0}' and site = '{1}'
                 ;""".format(Leg, Site))
 site_key = site_key.fetchone()[0]
 
 # Send metadata to database
-sql= """insert into metadata_{}_flux (site_key,leg,site,por_cutoff)
-                   VALUES ({}, '{}', '{}', {})
-                   ON DUPLICATE KEY UPDATE por_cutoff={}
-                   ;""".format(Solute_db, site_key,Leg,Site,
-                               por_cutoff_depth,por_cutoff_depth)
+sql= """insert into porosity_cutoff (site_key,site,por_cutoff_depth)
+                   VALUES ({0}, '{1}', {2})
+                   ON DUPLICATE KEY UPDATE por_cutoff_depth={2}
+                   ;""".format(site_key,Site,por_cutoff_depth)
 con.execute(sql)
 
 # eof
