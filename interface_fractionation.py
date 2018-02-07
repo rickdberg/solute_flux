@@ -52,10 +52,10 @@ import pandas as pd
 import datetime
 from pylab import savefig
 import matplotlib.pyplot as plt
-from sqlalchemy import create_engine
 
 import flux_functions as ff
-from site_metadata_compiler import metadata_compiler
+from user_parameters import (engine, conctable, portable, metadata_table,
+                             site_info, hole_info, flux_fig_path, mc_fig_path)
 
 # Site Information
 Leg = '344'
@@ -81,19 +81,6 @@ line_fit = 'exponential'
 top_boundary = 'seawater'
 dp = 4
 
-# Connect to database
-engine = create_engine("mysql://root:neogene227@localhost/iodp_compiled")
-conctable = 'iw_all'
-portable = 'mad_all'
-metadata_table = "metadata_mg_flux"
-site_info = "site_info"
-hole_info = "summary_all"
-
-# File paths
-flux_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output fractionation figures\\"
-mc_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output fractionation figures\\"
-
-
 ###############################################################################
 ###############################################################################
 con = engine.connect()
@@ -101,7 +88,7 @@ runtime_errors = 0
 plt.close('all')
 
 # Load and prepare all input data
-site_metadata = metadata_compiler(engine, metadata_table, site_info,
+site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
                                   hole_info, Leg, Site)
 
 concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
@@ -221,10 +208,11 @@ for n in np.arange(2):
                              temp_gradient)
     figure_1.show()
 
-    # Save Figure
-    savefig(flux_fig_path +
-        "interface_{}_fractionation_{}_{}_{}.png"
-        .format(Solute_db, Leg, Site, n))
+    # Save Figure, if folder specified in user_parameters
+    if flux_fig_path:
+        savefig(flux_fig_path +
+            "interface_{}_fractionation_{}_{}_{}.png"
+            .format(Solute_db, Leg, Site, n))
     fluxes.append(flux)
 
 # Calculate fractionation based on fluxes
@@ -271,9 +259,10 @@ con.execute(sql)
 mc_figure = ff.monte_carlo_plot_fract(alpha, alpha_median, alpha_stdev,
                                       alpha_mean, p_value)
 mc_figure.show()
-savefig(mc_fig_path +
-    "interface_{}_fractionation_distribution_{}_{}.png"
-    .format(Solute_db, Leg, Site))
+if mc_fig_path:
+    savefig(mc_fig_path +
+        "interface_{}_fractionation_distribution_{}_{}.png"
+        .format(Solute_db, Leg, Site))
 
 print("Mean Epsilon:", round((alpha_mean-1)*1000, 4))
 print("SD Epsilon:", round(alpha_stdev*1000, 4))
