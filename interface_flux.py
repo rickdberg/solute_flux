@@ -26,12 +26,6 @@ z:              depth at which flux is calculated (mbsf)
 cycles:         number of monte carlo simulations to run
 line_fit:       "linear" or "exponential" line fit to concentration profile
 dp:             concentration datapoints below seafloor used for line fit
-engine:         SQLAlchemy engine
-conctable:      name of MySQL solute concentration table
-portable:       name of MySQL porosity (MAD) table
-metadata_table: name of MySQL metadata table
-site_info:      name of MySQL site information table
-hole_info:      name of MySQL hole information table
 
 In addition, filepaths to directories where the figures and output data are to
 be stored need to be specified in the script.
@@ -73,10 +67,16 @@ import numpy as np
 import datetime
 from pylab import savefig
 import matplotlib.pyplot as plt
-from sqlalchemy import create_engine
 
 import flux_functions as ff
 from site_metadata_compiler import metadata_compiler
+from user_parameters import (engine, conctable, portable, metadata_table,
+                             site_info, hole_info, flux_fig_path, mc_fig_path,
+                             mc_text_path)
+
+###############################################################################
+###############################################################################
+# User-specified parameters
 
 # Site Information
 Leg = '190'
@@ -86,10 +86,10 @@ Comments = ''
 
 # Species parameters
 Solute = 'Mg'  # Change X to X_ic if needed, based on availability in database
-Ds = 1.875*10**-2  # m^2 per year (Li & Gregory 1971)
+Ds = 1.875*10**-2  # m^2 per year
 TempD = 18  # degrees C
 Precision = 0.02
-Ocean = 54  # mM
+Ocean = 54
 Solute_db = 'Mg'
 
 # Model parameters
@@ -97,19 +97,6 @@ z = 0
 cycles = 5000
 line_fit = 'exponential'
 dp = 8
-
-# Connect to database
-engine = create_engine("mysql://root:neogene227@localhost/iodp_compiled")
-conctable = 'iw_all'
-portable = 'mad_all'
-metadata_table = "metadata_mg_flux"
-site_info = "site_info"
-hole_info = "summary_all"
-
-# File Paths
-flux_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\\"
-mc_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\\"
-mc_text_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\\"
 
 ###############################################################################
 ###############################################################################
