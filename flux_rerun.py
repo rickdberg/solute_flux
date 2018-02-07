@@ -15,12 +15,6 @@ cycles:         number of monte carlo simulations to run
 line_fit:       "linear" or "exponential" line fit to concentration profile
 Ocean:          concentration of conservative solute in the ocean (mM)
 Solute_db:      solute name for inserting into database
-engine:         SQLAlchemy engine
-conctable:      name of MySQL solute concentration table
-portable:       name of MySQL porosity (MAD) table
-metadata_table: name of MySQL metadata table
-site_info:      name of MySQL site information table
-hole_info:      name of MySQL hole information table
 
 Outputs are the same as interface_flux.py
 Outputs:
@@ -61,10 +55,11 @@ import pandas as pd
 import datetime
 from pylab import savefig
 import matplotlib.pyplot as plt
-from sqlalchemy import create_engine
 
 import flux_functions as ff
-from site_metadata_compiler import metadata_compiler
+from user_parameters import (engine, conctable, portable, metadata_table,
+                             site_info, hole_info, flux_fig_path, mc_fig_path,
+                             mc_text_path)
 
 # Simulation parameters
 cycles = 5000
@@ -74,28 +69,17 @@ line_fit = 'exponential'
 Ocean = 54
 Solute_db = 'Mg'
 
-# Connect to database
-engine = create_engine("mysql://root:neogene227@localhost/iodp_compiled")
+###############################################################################
+###############################################################################
+# Create sqlalchemy cursor
 con = engine.connect()
-conctable = 'iw_all'
-portable = 'mad_all'
-metadata_table = "metadata_mg_flux"
-site_info = "site_info"
-hole_info = "summary_all"
 
-#File paths
-flux_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\\"
-mc_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\\"
-mc_text_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\\"
-
-###############################################################################
-###############################################################################
 sql = """select *
 from {}
 ;""".format(metadata_table)
 metadata = pd.read_sql(sql, engine)
 
-for i in np.arange(np.size(metadata, axis=0))[:]:  # If script erros out on specific site, can type in index here
+for i in np.arange(np.size(metadata, axis=0))[:]:  # If script errors out on specific site, can type in index here
     cycles = 5000
     Complete = 'yes'
     Comments = metadata.comments[i]
@@ -114,7 +98,7 @@ for i in np.arange(np.size(metadata, axis=0))[:]:  # If script erros out on spec
     print(i)
 
     # Load and prepare all input data
-    site_metadata = metadata_compiler(engine, metadata_table, site_info,
+    site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
                                       hole_info, Leg, Site)
     concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(Leg, Site, Holes, Solute, Ocean, engine, conctable, portable, site_metadata)
     # concunique = concunique[1:,:]  # If you don't use bottom water concentration
