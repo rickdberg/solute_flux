@@ -39,7 +39,8 @@ import matplotlib.pyplot as plt
 from scipy import optimize
 import os
 import datetime
-from sqlalchemy import create_engine
+
+from user_parameters import (engine, age_table)
 
 Script = os.path.basename(__file__)
 Date = datetime.datetime.now()
@@ -54,25 +55,17 @@ Bottom_boundary = 'none' # 'none', or an integer depth
 age_depth_boundaries = [0,4,15,22,32] # Index when sorted by depth
 top_age = 0  # years
 
-# Connect to database
-user = 'root'
-passwd = 'neogene227'
-host = '127.0.0.1'
-db = 'iodp_compiled'
-age_table = 'age_depth'
-database = "mysql://root:neogene227@localhost/iodp_compiled"
-con = create_engine(database)
-cur = con.connect()
-
 ###############################################################################
 ###############################################################################
+# Create database cursor
+cur = engine.connect()
 
 # Load age-depth data
 sql = """SELECT depth, age
          FROM {}
          where leg = '{}' and site = '{}' order by 1 ;
          """.format(age_table, Leg, Site)
-sed = pd.read_sql(sql, con)
+sed = pd.read_sql(sql, engine)
 sed = sed.as_matrix()
 
 # If input data don't include time at depth=0, insert top_age
