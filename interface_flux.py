@@ -98,7 +98,7 @@ z = 0
 cycles = 5000
 line_fit = 'exponential'
 dp = 8
-optimized = 'yes'  # whether finished optimizing Model Parameters for this site
+optimized = 'no'  # whether finished optimizing Model Parameters for this site
 top_seawater = 'yes'  # whether to use ocean bottom water as top boundary
 
 ###############################################################################
@@ -143,7 +143,7 @@ tortuosity = 1-np.log(porosity**2)
 
 # Calculate effective diffusion coefficient
 d_in_situ = ff.d_stp(temp_d, bottom_temp, ds)
-dsed = d_in_situ/tortuosity  # Effective diffusion coefficient
+dsed = d_in_situ/tortuosity
 
 # Calculate pore water burial flux rate
 pwburialflux = ff.pw_burial(seddepths, sedtimes, por_fit, por)

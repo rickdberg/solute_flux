@@ -15,6 +15,9 @@ cycles:         number of monte carlo simulations to run
 line_fit:       "linear" or "exponential" line fit to concentration profile
 ocean:          concentration of conservative solute in the ocean (mM)
 solute_db:      solute name for inserting into database
+top_seawater:   'yes' or 'no', whether to use ocean bottom water concentration
+                 as a value at z=0
+
 
 Outputs are the same as interface_flux.py
 Outputs:
@@ -140,7 +143,7 @@ for i in np.arange(np.size(metadata, axis=0))[:]:  # If script errors out on spe
 
     # Calculate effective diffusion coefficient
     d_in_situ = ff.d_stp(temp_d, bottom_temp, ds)
-    dsed = d_in_situ/tortuosity  # Effective diffusion coefficient
+    dsed = d_in_situ/tortuosity
 
     # Calculate pore water burial flux rate
     pwburialflux = ff.pw_burial(seddepths, sedtimes, por_fit, por)
