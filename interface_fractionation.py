@@ -100,10 +100,9 @@ isotopedata = pd.read_sql(sql, engine)
 isotopedata = isotopedata.sort_values(by='sample_depth')
 
 # Calculate d25Mg for data from Higgins and Schrag 2010,
-# based on d25Mg = 0.52*d26Mg, cited in Isotope Geochemistry,
-# William White, pp.365
+# based on d25Mg = 0.52*d26Mg, from Galy 2000 and Young and Galy 2004
 if isotopedata.d25mg.isnull().all():
-    isotopedata.d25mg = 0.52 * isotopedata.d26mg
+    isotopedata.d25mg = 0.5163 * isotopedata.d26mg
 isotopedata = isotopedata[isotopedata.notnull().all(axis=1)]
 isotopedata_26 = ff.averages(isotopedata['sample_depth'],
                                         isotopedata.iloc[:, 1])
@@ -147,10 +146,9 @@ else:
 
 # Calculate Mg isotope concentrations
 # Decimal numbers are isotopic ratios of standards.
-# Source for 26/24std: Isotope Geochemistry, William White, pp.365
-# 25Mg/24Mg calculated from from 26/24 value divided by 25/24 measured values.
+# Source for ratios: Young and Galy 2004
 mg26_24 = ((isotopedata[:, 1]/1000)+1)*0.13979
-mg25_24 = ((isotopedata[:, 2]/1000)+1)*0.126635
+mg25_24 = ((isotopedata[:, 2]/1000)+1)*0.12685
 concunique_mg24 = isotopedata[:, 3]/(mg26_24+mg25_24+1)
 concunique_mg25 = concunique_mg24*mg25_24
 concunique_mg26 = concunique_mg24*mg26_24
