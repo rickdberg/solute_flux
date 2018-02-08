@@ -409,9 +409,6 @@ def concentration_fit(concunique, dp, line_fit):
                                                     bounds=([-10,-1000],
                                                             [10,1000]),
                                                     method='trf')
-    # To be used if Boudreau method for conc gradient is used
-    # conc_interp_depths = np.arange(0,3,intervalthickness)
-    # conc_interp_fit = conc_curve(conc_interp_depths, conc_fit)
     return conc_fit
 
 
@@ -509,10 +506,6 @@ def flux_model(conc_fit, concunique, z, pwburialflux, porosity, dsed,
         # Derivative of conc_curve @ z
         gradient = (
             conc_fit[1] * conc_fit[0] * np.exp(np.multiply(conc_fit[0], z)))
-        # Approximation according to Boudreau 1997
-        # gradient = (-3*conc_interp_fit[0] +
-        #             4*conc_interp_fit[1] -
-        #             conc_interp_fit[2]) / (2*intervalthickness)
     elif line_fit == 'linear':
         # Derivative of conc_curve @ z
         gradient = conc_fit[0]
@@ -592,22 +585,6 @@ def monte_carlo(cycles, precision, concunique, bottom_temp_est, dp, por,
         temp_error = 0
         temp_offsets = np.zeros(cycles)
 
-    '''
-    # Concentration offsets - truncate at 2-sigma of gaussian distribution
-    i=0
-    offsets = []
-    while i < cycles:
-        offset = []
-        j=0
-        while j < len(concunique[:dp,1]):
-            errors = np.random.normal(scale=relativeerror)
-            if abs(errors) <= relativeerror:
-                offset.append(errors)
-                j = len(offset)
-        offsets.append(offset)
-        i = len(offsets)
-    '''
-
     # Get randomized concentration matrix (within realistic ranges)
     conc_rand = np.add(concunique[:dp,1],
                        np.multiply(conc_offsets, concunique[:dp,1]))
@@ -641,16 +618,6 @@ def monte_carlo(cycles, precision, concunique, bottom_temp_est, dp, por,
     bottom_temp_rand = bottom_temp+temp_offsets
     bottom_temp_rand[bottom_temp_rand < -2] = -2
     dsed_rand = d_stp(temp_d, bottom_temp_rand, ds)/tortuosity_rand
-
-    """
-    Plot all the monte carlo runs
-    conc_interp_fit_plot = conc_curve(np.linspace(concunique[0,0],
-                                                  concunique[dp-1,0],
-                                                  num=50), conc_fits)
-    por_interp_fit_plot = conc_curve(np.linspace(concunique[0,0],
-                                                 concunique[dp-1,0],
-                                                 num=50), conc_fits)
-    """
 
     # Calculate randomized fluxes
     if line_fit == 'exponential':
@@ -751,15 +718,6 @@ def monte_carlo_fract(cycles, precision, precision_iso, concunique,
     cycles = len(portop_rand)
     por_rand = por_rand[:cycles,:]
 
-    # Concentration offsets - using full gaussian probability
-    # relativeerror = precision
-    # conc_offsets = np.random.normal(scale=relativeerror,
-    #                                 size=(cycles, len(isotopedata[:, 3])))
-    # Get randomized concentration matrix (within realistic ranges)
-    # conc_rand = np.add(isotopedata[:, 3], np.multiply(conc_offsets,
-    #                                                    isotopedata[:, 3]))
-    # conc_rand[conc_rand < 0] = 0
-
     # Isotopic ratio (in delta notation) offsets - full gaussian probability
     delta_offsets = precision_iso[:,None]*np.random.normal(scale=1,
                                             size=(len(precision_iso), cycles))
@@ -771,7 +729,6 @@ def monte_carlo_fract(cycles, precision, precision_iso, concunique,
     mg26_24 = (((isotopedata[:, 1][:,None]+delta_offsets)/1000)+1)*0.13979
     mg25_24 = (((isotopedata[:, 2][:,None]+delta_offsets)/1000)+1)*0.126635
     concunique_mg24 = isotopedata[:, 3][:,None]/(mg26_24+mg25_24+1)
-    # concunique_mg24 = conc_rand.T/(mg26_24+mg25_24+1)
     concunique_mg26 = concunique_mg24*mg26_24
     isotope_concs = [concunique_mg24, concunique_mg26]
 
@@ -820,16 +777,6 @@ def monte_carlo_fract(cycles, precision, precision_iso, concunique,
     bottom_temp_rand = bottom_temp+temp_offsets
     bottom_temp_rand[bottom_temp_rand < -2] = -2
     dsed_rand = d_stp(temp_d, bottom_temp_rand, ds)/tortuosity_rand
-
-    """
-    Plot all the monte carlo runs
-    conc_interp_fit_plot = conc_curve(np.linspace(concunique[0,0],
-                                                  concunique[dp-1,0],
-                                                  num=50), conc_fits)
-    por_interp_fit_plot = conc_curve(np.linspace(concunique[0,0],
-                                                 concunique[dp-1,0],
-                                                 num=50), conc_fits)
-    """
 
     # Calculate fluxes
     fluxes = []
@@ -969,11 +916,9 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit,
     ax1.set_xlabel('${}\ (mM)$'.format(solute_db), fontsize=18)
     ax2.set_xlabel('$Porosity$', fontsize=18)
     ax3.set_xlabel('$Age\ (Ma)$', fontsize=18)
-    #ax4.set_xlabel('Temperature (\u00b0C)')
     ax1.locator_params(axis='x', nbins=4)
     ax2.locator_params(axis='x', nbins=4)
     ax3.locator_params(axis='x', nbins=4)
-    #ax4.locator_params(axis='x', nbins=4)
     axins1.locator_params(axis='x', nbins=3)
     ax1.invert_yaxis()
     axins1.invert_yaxis()
