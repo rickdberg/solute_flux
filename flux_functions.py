@@ -148,8 +148,8 @@ def rmse(model_values, measured_values):
     return np.sqrt(((model_values-measured_values)**2).mean())
 
 
-def load_and_prep(leg, site, holes, solute, Ocean, engine, conctable,
-                    portable, site_metadata):
+def load_and_prep(leg, site, holes, solute, ocean, engine, conctable,
+                    portable, site_metadata, solute_units):
     """
     Imports data from MySQL database, prepares data for modeling, and ouputs
     relevant data for model.
@@ -160,11 +160,12 @@ def load_and_prep(leg, site, holes, solute, Ocean, engine, conctable,
     site:          Drilling site number
     holes:         Drilling hole designations
     solute:        solute name in database
-    Ocean:         concentration of conservative solute in the ocean
+    ocean:         concentration of conservative solute in the ocean
     engine:        SQLAlchemy engine
     conctable:     Name of MySQL solute concentration table
     portable:      Name of MySQL porosity (MAD) table
     site_metadata: site metadata from site_metadata_compiler.py
+    solute_units:  solute concetration units of data from database
 
     Function outputs:
     concunique:           2D array of sample depth and solute concentration
@@ -212,13 +213,23 @@ def load_and_prep(leg, site, holes, solute, Ocean, engine, conctable,
     concdata = pd.read_sql(sql, engine)
     concdata = concdata.sort_values(by='sample_depth')
     concdata = concdata.as_matrix()
+    if solute_units == 'uM':
+        concdata.iloc[:,1] = concdata.iloc[:,1]/1000
+        ocean = ocean/1000
+    elif solute_units == 'nM':
+          concdata.iloc[:,1] = concdata.iloc[:,1]/10**6
+          ocean = ocean/10**6
+    elif solute_units == 'mM':
+        pass
+    else:
+        sys.exit("Unrecognized solute units, use 'mM', 'uM', or 'nM'")
 
     # Bottom water concentration based on WOA bottom salinities.
     woa_salinity = site_metadata['woa_salinity'][0]
     density = seawater.eos80.dens0(woa_salinity, bottom_temp)
     # Muller 1999, In Grasshoff et al.
     woa_cl = (1000*(woa_salinity-0.03)*density/1000)/(1.805*35.45)
-    bottom_conc=woa_cl/558*Ocean
+    bottom_conc=woa_cl/558*ocean
     # mol per m^3 in modern seawater at specific site
     ct0 = [bottom_conc]
 
@@ -855,8 +866,8 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit,
 
     # Figure title
     figure_1.suptitle(
-        r"$Expedition\ {},\ Site\ {}\ \ \ \ \ \ \ \ \ \ {}\ flux={}\ mol/m^2y$"
-        .format(leg, site, solute_db, round(flux,4)), fontsize=20)
+        r"$Expedition\ {},\ Site\ {}\ \ \ \ \ \ \ {}\ flux={:.2e}\ mmol/m^2y$"
+        .format(leg, site, solute_db, flux*1000), fontsize=20)
 
     # Plot input data
     ax1.plot(concunique[:,1],
@@ -906,6 +917,7 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit,
                             'k-')
     axins1.set_xlim(x1-0.01, x2+0.01)
     axins1.set_ylim(0, y2)
+    axins1.xaxis.get_major_formatter().set_powerlimits((0, 2))
     mark_inset(ax1, axins1, loc1=1, loc2=2, fc="none", ec="0.5")
 
     # Additional formatting
@@ -914,6 +926,7 @@ def flux_plots(concunique, conc_interp_fit_plot, por, por_all, porfit,
     ax3.legend(loc='best', fontsize='small')
     ax1.set_ylabel('$Depth\ (mbsf)$', fontsize=18)
     ax1.set_xlabel('${}\ (mM)$'.format(solute_db), fontsize=18)
+    ax1.xaxis.get_major_formatter().set_powerlimits((-1, 3))
     ax2.set_xlabel('$Porosity$', fontsize=18)
     ax3.set_xlabel('$Age\ (Ma)$', fontsize=18)
     ax1.locator_params(axis='x', nbins=4)
@@ -987,9 +1000,10 @@ def monte_carlo_plot(fluxes_real, mean_flux, stdev_flux, skewness,
                                       facecolor='orange')
 
     # Best fit normal distribution line to results
-    bf_line_1 = mlab.normpdf(bins_1, mean_flux*1000, stdev_flux*1000)
+    bf_line_1 = mlab.normpdf(bins_1, mean_flux *1000, stdev_flux * 1000)
     ax5.plot(bins_1, bf_line_1, 'k--', linewidth=2)
     ax5.set_xlabel("$Interface\ flux\ (mmol\ m^{-2}\ y^{-1})$", fontsize=20)
+    ax5.xaxis.get_major_formatter().set_powerlimits((-1, 3))
 
     [left_raw, right_raw] = ax5.get_xlim()
     [bottom_raw, top_raw] = ax5.get_ylim()
