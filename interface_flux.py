@@ -30,6 +30,7 @@ optimized:      'yes' or 'no', whether model parameters and ready to run monte
                 carlo simulation and save output to database for this site
 top_seawater:   'yes' or 'no', whether to use ocean bottom water concentration
                  as a value at z=0
+solute_units:   solute concetration units, 'mM', 'uM', or 'nM'
 
 Outputs:
 flux:                 solute flux at z (mol m^-2 y^-1). Positive flux value is
@@ -92,6 +93,7 @@ temp_d = 18  # degrees C
 precision = 0.02
 ocean = 54
 solute_db = 'Mg'
+solute_units = 'mM'
 
 # Model Parameters
 z = 0
@@ -111,7 +113,7 @@ plt.close('all')
 # Load and prepare all input data
 site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
                                   hole_info, leg, site)
-concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata)
+concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata, solute_units)
 if top_seawater != 'yes':
     concunique = concunique[1:,:]
 

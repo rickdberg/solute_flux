@@ -21,14 +21,13 @@ temp_d:          reference temperature of diffusion coefficient (C)
 precision:      relative standard deviation of concentration measurements
 ocean:          concentration of conservative solute in the ocean (mM)
 solute_db:      solute name for referencing
+solute_units:   solute concetration units, 'mM', 'uM', or 'nM'
 z:              depth at which flux is calculated (mbsf)
 cycles:         number of monte carlo simulations to run
 line_fit:       "linear" or "exponential" line fit to concentration profile
-top_boundary:   designate 'seawater' to use "ocean" value, otherwise uses the
-                shallowest pore water measurement value for the upper boundary
-dp:             concentration datapoints below seafloor used for line fit
 top_seawater:   'yes' or 'no', whether to use ocean bottom water concentration
                  as a value at z=0
+dp:             concentration datapoints below seafloor used for line fit
 
 Outputs:
 alpha:        fractionation factor from ocean to sediment column
@@ -61,6 +60,7 @@ temp_d = 18  # degrees C
 precision = 0.02
 ocean = 54  # mM
 solute_db = 'Mg'
+solute_units = 'mM'
 ct_d26 = -0.83
 ct_d25 = -0.43
 
@@ -81,7 +81,7 @@ plt.close('all')
 site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
                                   hole_info, leg, site)
 
-concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata)
+concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata, solute_units)
 concunique = pd.DataFrame(concunique)
 concunique.columns = ['sample_depth', 'mg_conc']
 

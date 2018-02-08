@@ -17,7 +17,7 @@ ocean:          concentration of conservative solute in the ocean (mM)
 solute_db:      solute name for inserting into database
 top_seawater:   'yes' or 'no', whether to use ocean bottom water concentration
                  as a value at z=0
-
+solute_units:   solute concetration units, 'mM', 'uM', or 'nM'
 
 Outputs are the same as interface_flux.py
 Outputs:
@@ -72,6 +72,7 @@ top_seawater = 'yes'  # whether to use ocean bottom water as top boundary
 # Species parameters
 ocean = 54
 solute_db = 'Mg'
+solute_units = 'mM'
 
 ###############################################################################
 ###############################################################################
@@ -104,7 +105,7 @@ for i in np.arange(np.size(metadata, axis=0))[:]:  # If script errors out on spe
     # Load and prepare all input data
     site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
                                       hole_info, leg, site)
-    concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata)
+    concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata, solute_units)
     if top_seawater != 'yes':
         concunique = concunique[1:,:]
 
