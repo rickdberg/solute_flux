@@ -18,11 +18,6 @@ holes:                drilling hole IDs
 bottom_boundary:      lower depth boundary of data to fit (mbsf)
 age_depth_boundaries: indices of age-depth data bounds for piece-wise line fit
 top_age:              sediment age at sediment-water interface (default = 0 y)
-user:                 MySQL database username
-passwd:               MySQL database password
-host:                 MySQL database IP address
-db:                   MYSQL database name
-age_table:            MYSQL database age-depth data table name
 
 Outputs:
 sedrate_ages:    ages at boundaries of sedimentation regime sections (years)
