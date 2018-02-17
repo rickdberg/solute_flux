@@ -3,7 +3,7 @@
 Created on Sun Apr 16 14:39:00 2017
 Author: Rick Berg, University of Washington School of Oceanography, Seattle WA
 
-Module for calculating flux of solutes into/out of sediments.
+Library of functions for calculating flux of solutes into/out of sediments.
 
 Functions:
 metadata_compiler:   compile all available site metadata
@@ -331,9 +331,8 @@ def d_stp(t_ref, t_in_situ, ds):
     visd = muwd*(1 + A*0.035 + B*0.035**2)
 
     # Viscosity vector
-    muw = (4.2844324477E-05 +
-           1 /
-           (1.5700386464E-01*(t_in_situ + 6.4992620050E+01)**2+-9.1296496657E+01))
+    muw = (4.2844324477E-05 + 1
+           / (1.5700386464E-01*(t_in_situ + 6.4992620050E+01)**2+-9.1296496657E+01))
     C = 1.5409136040E+00 + 1.9981117208E-02 * t_in_situ + -9.5203865864E-05 * t_in_situ**2
     D = 7.9739318223E+00 + -7.5614568881E-02 * t_in_situ + 4.7237011074E-04 * t_in_situ**2
     vis = muw*(1 + C*0.035 + D*0.035**2)
@@ -524,7 +523,7 @@ def flux_model(conc_fit, concunique, z, pwburialflux, porosity, dsed,
     flux = (porosity * dsed * -gradient +
             (porosity * advection + pwburialflux)
             * conc_curve(line_fit)(z, *conc_fit))
-    print('Site:', site, 'Flux (mol/m^2 y^-1):', flux)
+    print('Site:', site, 'Flux (mol m^-2 y^-1):', flux)
     return flux, burial_flux, gradient
 
 
