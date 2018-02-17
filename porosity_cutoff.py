@@ -13,8 +13,6 @@ leg:              drilling leg/expedition number
 site:             drilling site number
 holes:            drilling hole IDs
 por_cutoff_depth: bottom boundary of compaction regime (mbsf)
-ocean:            concentration of conservative solute in the ocean (mM)
-solute:           solute name in database
 
 Outputs:
 por_cutoff_depth: bottom boundary of compaction regime (mbsf)
@@ -34,14 +32,14 @@ site = 'C0001'
 holes = "('E','F','H') or hole is null"
 por_cutoff_depth = 195  # Integer depth, otherwise np.nan
 
-# Species parameters
-solute = 'Mg'
-solute_units = 'mM'
-ocean = 54
-
 ###############################################################################
 ###############################################################################
 con = engine.connect()
+
+# Species parameters (do not change)
+solute = 'Mg'
+solute_units = 'mM'
+ocean = 54
 
 # Load site data
 site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
