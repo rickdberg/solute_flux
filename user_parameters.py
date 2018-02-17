@@ -5,13 +5,7 @@ Created on Tue Feb  6 17:19:14 2018
 Author: Rick Berg, University of Washington School of Oceanography, Seattle WA
 
 Initiation script for to load user-specific settings for the solute_flux
-package. Must be run before any of the solute_flux modules, including:
-age_depth,
-porosity_cutoff,
-initial_flux,
-iterface_flux,
-interface_fractionation,
-and flux_rerun.
+package.
 
 Variables:
 engine:         sqlalchemy formatted connection to database
@@ -42,6 +36,7 @@ por_cut_table = "porosity_cutoff"
 
 # Optional: Folder paths for saving flux input data figure, and monte carlo
 # distribution figure and matrix.
+# Example for Windows OS: r"C:\Users\root\flux_fig_output\\"
 # If not saving to any folder, leave as ""
 flux_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output flux figures\\"
 mc_fig_path = r"C:\Users\rickdberg\Documents\UW Projects\Magnesium uptake\Data\Output monte carlo distributions\\"
