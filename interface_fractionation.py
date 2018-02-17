@@ -49,8 +49,8 @@ from user_parameters import (engine, conctable, portable, metadata_table,
                              site_info, hole_info, flux_fig_path, mc_fig_path)
 
 # site Information
-leg = '344'
-site = 'U1414'
+leg = '175'
+site = '1086'
 holes = "('A') or hole is null"
 
 # Species parameters
@@ -67,8 +67,8 @@ ct_d25 = -0.43
 # Model parameters
 z = 0
 cycles = 5000
-line_fit = 'exponential'
-top_seawater = 'yes'  # whether to use ocean bottom water as top boundary
+line_fit = 'linear'
+top_seawater = 'no'  # whether to use ocean bottom water as top boundary
 dp = 4
 
 ###############################################################################

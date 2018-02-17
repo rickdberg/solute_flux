@@ -112,8 +112,12 @@ plt.close('all')
 
 # Load and prepare all input data
 site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
-                                  hole_info, leg, site)
-concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata, solute_units)
+                                     hole_info, leg, site)
+(concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est,
+ pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries,
+ advection) = ff.load_and_prep(leg, site, holes, solute, ocean, engine,
+                               conctable, portable, site_metadata,
+                               solute_units)
 if top_seawater != 'yes':
     concunique = concunique[1:,:]
 
@@ -168,7 +172,15 @@ if optimized == 'yes':
                "interface_{}_flux_{}_{}.png".format(solute_db, leg, site))
 
     # Monte Carlo Simulation
-    interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux, median_flux, stdev_flux, skewness, p_value, mean_flux_log, median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper, skewness_log, p_value_log, runtime_errors, conc_fits = ff.monte_carlo(cycles, precision, concunique, bottom_temp_est, dp, por, por_fit, seddepths, sedtimes, temp_d, bottom_temp, z, advection, leg, site, solute_db, ds, por_error, conc_fit, runtime_errors, line_fit)
+    (interface_fluxes, interface_fluxes_log, cycles, por_error, mean_flux,
+     median_flux, stdev_flux, skewness, p_value, mean_flux_log,
+     median_flux_log, stdev_flux_log, stdev_flux_lower, stdev_flux_upper,
+     skewness_log, p_value_log, runtime_errors,
+     conc_fits) = ff.monte_carlo(cycles, precision, concunique,
+                                bottom_temp_est, dp, por, por_fit, seddepths,
+                                sedtimes, temp_d, bottom_temp, z, advection,
+                                leg, site, solute_db, ds, por_error, conc_fit,
+                                runtime_errors, line_fit)
 
     # Plot Monte Carlo Distributions
     mc_figure =ff.monte_carlo_plot(interface_fluxes, median_flux, stdev_flux,
@@ -207,4 +219,5 @@ if optimized == 'yes':
     print('Results sent to database')
 else:
     print('Continue optimization: Results NOT sent to database')
+
 # eof
