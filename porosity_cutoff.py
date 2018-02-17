@@ -25,7 +25,6 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 import flux_functions as ff
-from site_metadata_compiler import metadata_compiler
 from user_parameters import (engine, conctable, portable, metadata_table,
                              site_info, hole_info)
 
@@ -37,6 +36,7 @@ por_cutoff_depth = 195  # Integer depth, otherwise np.nan
 
 # Species parameters
 solute = 'Mg'
+solute_units = 'mM'
 ocean = 54
 
 ###############################################################################
@@ -44,9 +44,13 @@ ocean = 54
 con = engine.connect()
 
 # Load site data
-site_metadata = metadata_compiler(engine, metadata_table, site_info,
+site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
                                   hole_info, leg, site)
-concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est, pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries, advection = ff.load_and_prep(leg, site, holes, solute, ocean, engine, conctable, portable, site_metadata)
+(concunique, temp_gradient, bottom_conc, bottom_temp, bottom_temp_est,
+ pordata, sedtimes, seddepths, sedrate, picks, age_depth_boundaries,
+ advection) = ff.load_and_prep(leg, site, holes, solute, ocean, engine,
+                               conctable, portable, site_metadata,
+                               solute_units)
 
 # Average duplicates and apply porosity cutoff depth
 por = ff.averages(pordata[:, 0],
