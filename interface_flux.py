@@ -81,8 +81,8 @@ from user_parameters import (engine, conctable, portable, metadata_table,
 # User-specified parameters
 
 # Site Information
-leg = '190'
-site = '1178'
+leg = '198'
+site = '1212'
 holes = "('A','B') or hole is null"
 comments = ''
 
@@ -97,7 +97,7 @@ solute_units = 'mM'
 
 # Model Parameters
 z = 0
-cycles = 5000
+cycles = 1000
 line_fit = 'exponential'
 dp = 8
 optimized = 'no'  # whether finished optimizing Model Parameters for this site
@@ -121,17 +121,20 @@ site_metadata = ff.metadata_compiler(engine, metadata_table, site_info,
 if top_seawater != 'yes':
     concunique = concunique[1:,:]
 
-if not sedtimes.size:
-    sys.exit("Sedimentation Rates not yet calculated for this site."
-        "Use age_depth.py to calculate.")
+if 'por_cutoff' not in  site_metadata:
+    sys.exit('Run porosity_cutoff.py for site before calculating flux.')
 
 # Fit pore water concentration curve
-conc_fit = ff.concentration_fit(concunique, dp, line_fit)
+try:
+    conc_fit = ff.concentration_fit(concunique, dp, line_fit)
+except:
+    sys.exit("Concentration fit failed, try fitting a different number of"
+        "datapoints")
 conc_interp_fit_plot = ff.conc_curve(line_fit)(np.linspace(concunique[0,0],
                                                 concunique[dp-1,0],
                                                 num=50), *conc_fit)
 
-# R-squared function
+# R-squared of line fit to concentration profile
 r_squared = ff.rsq(ff.conc_curve(line_fit)(concunique[:dp,0], *conc_fit),
                    concunique[:dp,1])
 
