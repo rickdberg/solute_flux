@@ -27,10 +27,10 @@ from user_parameters import (engine, conctable, portable, metadata_table,
                              site_info, hole_info)
 
 # Site information
-leg = '315'
-site = 'C0001'
-holes = "('E','F','H') or hole is null"
-por_cutoff_depth = 195  # Integer depth, otherwise np.nan
+leg = '198'
+site = '1212'
+holes = "('A','B') or hole is null"
+por_cutoff_depth = 60  # Integer depth (mbsf), otherwise np.nan
 
 ###############################################################################
 ###############################################################################
