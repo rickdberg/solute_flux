@@ -41,13 +41,13 @@ script = os.path.basename(__file__)
 date = datetime.datetime.now()
 
 # Site Information
-leg = '199'
-site = '1219'
-holes = "('','A','B')"
+leg = '198'
+site = '1212'
+holes = "('A') or hole is null"
 
 # Model Parameters
 bottom_boundary = 'none' # 'none', or an integer depth
-age_depth_boundaries = [0,4,15,22,32] # Index when sorted by depth
+age_depth_boundaries = [0,23,35,59,68] # Index when sorted by depth
 top_age = 0  # years
 
 ###############################################################################
@@ -58,8 +58,8 @@ cur = engine.connect()
 # Load age-depth data
 sql = """SELECT depth, age
          FROM {}
-         where leg = '{}' and site = '{}' order by 1 ;
-         """.format(age_table, leg, site)
+         where leg = '{}' and site = '{}' and (hole in {}) order by 1 ;
+         """.format(age_table, leg, site, holes)
 sed = pd.read_sql(sql, engine)
 sed = sed.as_matrix()
 
