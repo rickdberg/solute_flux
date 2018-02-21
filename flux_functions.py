@@ -96,24 +96,27 @@ def metadata_compiler(engine, metadata, site_info, hole_info, leg, site):
              WHERE site = '{}'
              """.format(site)
     por_cuts = pd.read_sql(sql, engine)
-    if por_cuts.empty:
-        sys.exit('Run porosity_cutoff.py for site before calculating flux.')
 
     # Combine all tables
     ran_and_site = pd.merge(ran_metadata,
                               sitedata,
                               how='outer',
                               on=('site_key', 'leg', 'site'))
-    add_por_cut = pd.merge(ran_and_site,
+    if por_cuts.empty:
+        site_metadata = pd.merge(ran_and_site,
+                                 hole_grouped,
+                                 how='outer',
+                                 on=('site_key')).fillna(np.nan)
+    else:
+        add_por_cut = pd.merge(ran_and_site,
                               por_cuts,
                               how='outer',
                               on=('site_key', 'site'))
-    site_metadata = pd.merge(add_por_cut,
-                             hole_grouped,
-                             how='outer',
-                             on=('site_key')).fillna(np.nan)
+        site_metadata = pd.merge(add_por_cut,
+                                 hole_grouped,
+                                 how='outer',
+                                 on=('site_key')).fillna(np.nan)
     return site_metadata
-
 
 def averages(depths, values):
     """
@@ -214,10 +217,10 @@ def load_and_prep(leg, site, holes, solute, ocean, engine, conctable,
     concdata = concdata.sort_values(by='sample_depth')
     concdata = concdata.as_matrix()
     if solute_units == 'uM':
-        concdata.iloc[:,1] = concdata.iloc[:,1]/1000
+        concdata[:,1] = concdata[:,1]/1000
         ocean = ocean/1000
     elif solute_units == 'nM':
-          concdata.iloc[:,1] = concdata.iloc[:,1]/10**6
+          concdata[:,1] = concdata[:,1]/10**6
           ocean = ocean/10**6
     elif solute_units == 'mM':
         pass
@@ -261,6 +264,9 @@ def load_and_prep(leg, site, holes, solute, ocean, engine, conctable,
         ; """.format(leg, site)
     sedratedata = pd.read_sql(sql, engine)
     sedratedata = sedratedata.sort_values(by='sedrate_depths')
+    if sedratedata.empty:
+        sys.exit("Sedimentation Rates not yet calculated for this site."
+            "Use age_depth.py to calculate.")
 
     sedtimes = np.asarray(sedratedata.iloc[:,0][0][1:-1].split(","))
     seddepths = np.asarray(sedratedata.iloc[:,1][0][1:-1].split(","))
@@ -1022,7 +1028,7 @@ def monte_carlo_plot(fluxes_real, mean_flux, stdev_flux, skewness,
     # Best fit normal distribution line to ln(results)
     bf_line_2 = mlab.normpdf(bins_2, median_flux_log, stdev_flux_log)
     ax6.plot(bins_2, bf_line_2, 'k--', linewidth=2)
-    ax6.set_xlabel("$ln(abs(Interface flux)$", fontsize=20)
+    ax6.set_xlabel("$ln(Interface\ flux)$", fontsize=20)
 
     [left_log, right_log] = ax6.get_xlim()
     [bottom_log, top_log] = ax6.get_ylim()
